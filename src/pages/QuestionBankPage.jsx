@@ -91,7 +91,17 @@ export default function QuestionBankPage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], 'text/csv': ['.csv'] }, maxFiles: 1 })
 
-  const downloadTemplate = () => window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/questions/template`, '_blank')
+  const downloadTemplate = async () => {
+    try {
+      const res = await api.get('/questions/template', { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'question_template.xlsx'
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch { toast.error('Failed to download template') }
+  }
 
   return (
     <div className="fade-in">
