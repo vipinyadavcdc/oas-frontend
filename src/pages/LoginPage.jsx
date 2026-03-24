@@ -5,15 +5,15 @@ import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
-  const [form, setForm] = useState({ emp_id: '', password: '' })
+  const [form, setForm] = useState({ email: '', password: '' })
   const [showPass, setShowPass] = useState(false)
   const { login, loading } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.emp_id || !form.password) return toast.error('Enter Employee ID and password')
-    const res = await login(form.emp_id, form.password)
+    if (!form.email || !form.password) return toast.error('Enter Email Address and password')
+    const res = await login(form.email, form.password)
     if (res.success) {
       toast.success('Welcome back!')
       navigate('/dashboard')
@@ -47,12 +47,12 @@ export default function LoginPage() {
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="label">Employee ID</label>
+              <label className="label">Email Address</label>
               <input
                 className="input"
-                placeholder="e.g. EMP012"
-                value={form.emp_id}
-                onChange={e => setForm({ ...form, emp_id: e.target.value.toUpperCase() })}
+                placeholder="vipin.cdc@mriu.edu.in"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
                 autoComplete="username"
               />
             </div>
@@ -74,7 +74,7 @@ export default function LoginPage() {
                 </button>
               </div>
               <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                Default password is your Employee ID
+                Default password is your Email Address
               </p>
             </div>
             <button type="submit" disabled={loading}
