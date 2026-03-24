@@ -10,10 +10,10 @@ export function AuthProvider({ children }) {
   })
   const [loading, setLoading] = useState(false)
 
-  const login = async (emp_id, password) => {
+  const login = async (email, password) => {
     setLoading(true)
     try {
-      const res = await api.post('/auth/login', { email: emp_id, password })
+      const res = await api.post('/auth/login', { email, password })
       const { token, trainer } = res.data
       localStorage.setItem('cdc_token', token)
       localStorage.setItem('cdc_trainer', JSON.stringify(trainer))
@@ -32,11 +32,12 @@ export function AuthProvider({ children }) {
     setTrainer(null)
   }
 
-  const isSuperAdmin = trainer?.role === 'super_admin'
-  const isGranter = ['EMP001', 'EMP002'].includes(trainer?.emp_id) // Vipin & Ankur
+  const isMasterAdmin = trainer?.role === 'master_admin'
+  const isSuperAdmin  = trainer?.role === 'super_admin' || trainer?.role === 'master_admin'
+  const isGranter     = trainer?.role === 'master_admin'
 
   return (
-    <AuthContext.Provider value={{ trainer, login, logout, loading, isSuperAdmin, isGranter }}>
+    <AuthContext.Provider value={{ trainer, login, logout, loading, isMasterAdmin, isSuperAdmin, isGranter }}>
       {children}
     </AuthContext.Provider>
   )
