@@ -11,7 +11,7 @@ const STATS = [
   { target: 192,   suffix: '',  label: 'Avg Students/Exam', blue: false, delay: 750 },
 ]
 
-const TICKER = 'Aptitude Assessment \u2014 187 students \u2014 MRIIRS \u00a0|\u00a0 Verbal Reasoning Test \u2014 142 students \u2014 MRU \u00a0|\u00a0 Campus Placement Mock \u2014 234 students \u2014 MRIIRS \u00a0|\u00a0 Quantitative Ability Drive \u2014 98 students \u2014 MRU \u00a0|\u00a0 Logical Reasoning \u2014 176 students \u2014 MRIIRS \u00a0|\u00a0 Communication Skills \u2014 121 students \u2014 MRU \u00a0|\u00a0 Pre-Placement Assessment \u2014 209 students \u2014 MRIIRS'
+const TICKER = 'Aptitude Assessment — 187 students — MRIIRS \u00a0|\u00a0 Verbal Reasoning Test — 142 students — MRU \u00a0|\u00a0 Campus Placement Mock — 234 students — MRIIRS \u00a0|\u00a0 Quantitative Ability Drive — 98 students — MRU \u00a0|\u00a0 Logical Reasoning — 176 students — MRIIRS \u00a0|\u00a0 Communication Skills — 121 students — MRU \u00a0|\u00a0 Pre-Placement Assessment — 209 students — MRIIRS'
 
 function StatCard({ target, suffix, label, blue, delay }) {
   const [val, setVal] = useState(0)
@@ -29,11 +29,11 @@ function StatCard({ target, suffix, label, blue, delay }) {
     return () => clearTimeout(t)
   }, [target, delay])
   return (
-    <div style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:12, padding:'14px 16px' }}>
-      <div style={{ fontSize:24, fontWeight:700, letterSpacing:-1, lineHeight:1, color: blue?'#1a56db':'white' }}>
+    <div style={{ background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:10, padding:'12px 14px' }}>
+      <div style={{ fontSize:22, fontWeight:700, letterSpacing:-1, lineHeight:1, color: blue?'#3b82f6':'white' }}>
         {val.toLocaleString()}{suffix}
       </div>
-      <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginTop:4, letterSpacing:0.3 }}>{label}</div>
+      <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', marginTop:3 }}>{label}</div>
     </div>
   )
 }
@@ -47,37 +47,37 @@ function AnalogClock() {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    const cx = 90, cy = 90, r = 82
+    const cx = 75, cy = 75, r = 68
     function draw() {
       const now = new Date()
       const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds(), ms = now.getMilliseconds()
-      ctx.clearRect(0, 0, 180, 180)
-      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#0a1628'; ctx.fill()
-      ctx.strokeStyle='rgba(26,86,219,0.4)'; ctx.lineWidth=1.5; ctx.stroke()
-      ctx.beginPath(); ctx.arc(cx,cy,r-10,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1; ctx.stroke()
+      ctx.clearRect(0, 0, 150, 150)
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#0d1f3c'; ctx.fill()
+      ctx.strokeStyle='rgba(59,130,246,0.5)'; ctx.lineWidth=1.5; ctx.stroke()
+      ctx.beginPath(); ctx.arc(cx,cy,r-8,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1; ctx.stroke()
       for(let i=0;i<60;i++){
         const a=(i/60)*Math.PI*2-Math.PI/2, isMaj=i%5===0
         ctx.beginPath()
-        ctx.moveTo(cx+Math.cos(a)*(isMaj?r-14:r-9), cy+Math.sin(a)*(isMaj?r-14:r-9))
-        ctx.lineTo(cx+Math.cos(a)*(r-4), cy+Math.sin(a)*(r-4))
-        ctx.strokeStyle=isMaj?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.12)'; ctx.lineWidth=isMaj?1.5:0.8; ctx.stroke()
+        ctx.moveTo(cx+Math.cos(a)*(isMaj?r-12:r-7), cy+Math.sin(a)*(isMaj?r-12:r-7))
+        ctx.lineTo(cx+Math.cos(a)*(r-3), cy+Math.sin(a)*(r-3))
+        ctx.strokeStyle=isMaj?'rgba(255,255,255,0.6)':'rgba(255,255,255,0.15)'; ctx.lineWidth=isMaj?1.5:0.8; ctx.stroke()
       }
       for(let i=0;i<12;i++){
         const a=(i/12)*Math.PI*2-Math.PI/2
-        ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='8px Inter,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'
-        ctx.fillText(i===0?12:i, cx+Math.cos(a)*(r-22), cy+Math.sin(a)*(r-22))
+        ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='7px Inter,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'
+        ctx.fillText(i===0?12:i, cx+Math.cos(a)*(r-19), cy+Math.sin(a)*(r-19))
       }
       function hand(angle,length,width,color){
         ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle)
         ctx.beginPath(); ctx.moveTo(0,length*0.2); ctx.lineTo(0,-length)
         ctx.strokeStyle=color; ctx.lineWidth=width; ctx.lineCap='round'; ctx.stroke(); ctx.restore()
       }
-      hand(((h+m/60+s/3600)/12)*Math.PI*2-Math.PI/2, r*0.5, 3, 'rgba(255,255,255,0.9)')
-      hand(((m+s/60)/60)*Math.PI*2-Math.PI/2, r*0.7, 2, 'rgba(255,255,255,0.7)')
-      hand(((s+ms/1000)/60)*Math.PI*2-Math.PI/2, r*0.8, 1.2, '#1a56db')
-      ctx.beginPath(); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fillStyle='#1a56db'; ctx.fill()
-      ctx.beginPath(); ctx.arc(cx,cy,2,0,Math.PI*2); ctx.fillStyle='white'; ctx.fill()
-      const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+      hand(((h+m/60+s/3600)/12)*Math.PI*2-Math.PI/2, r*0.5, 2.5, 'rgba(255,255,255,0.95)')
+      hand(((m+s/60)/60)*Math.PI*2-Math.PI/2, r*0.68, 2, 'rgba(255,255,255,0.75)')
+      hand(((s+ms/1000)/60)*Math.PI*2-Math.PI/2, r*0.75, 1, '#3b82f6')
+      ctx.beginPath(); ctx.arc(cx,cy,3.5,0,Math.PI*2); ctx.fillStyle='#3b82f6'; ctx.fill()
+      ctx.beginPath(); ctx.arc(cx,cy,1.5,0,Math.PI*2); ctx.fillStyle='white'; ctx.fill()
+      const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
       const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
       setDateStr(days[now.getDay()]+', '+now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear())
       setTimeStr(String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0'))
@@ -87,10 +87,10 @@ function AnalogClock() {
     return () => cancelAnimationFrame(rafRef.current)
   }, [])
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-      <canvas ref={canvasRef} width={180} height={180} />
-      <div style={{ background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:20, padding:'5px 16px', color:'rgba(255,255,255,0.45)', fontSize:11, letterSpacing:'0.5px' }}>{dateStr}</div>
-      <div style={{ color:'rgba(255,255,255,0.18)', fontSize:11, letterSpacing:3, fontVariantNumeric:'tabular-nums' }}>{timeStr}</div>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+      <canvas ref={canvasRef} width={150} height={150} />
+      <div style={{ color:'rgba(255,255,255,0.4)', fontSize:11, letterSpacing:'0.5px' }}>{dateStr}</div>
+      <div style={{ color:'rgba(255,255,255,0.2)', fontSize:10, letterSpacing:3 }}>{timeStr}</div>
     </div>
   )
 }
@@ -110,84 +110,115 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#03080f', padding:16, fontFamily:"'Inter',sans-serif" }}>
-      <div style={{ width:'100%', maxWidth:960, background:'#06101f', borderRadius:16, overflow:'hidden', display:'grid', gridTemplateColumns:'1fr 1fr', border:'1px solid rgba(255,255,255,0.06)' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#030b18', padding:'16px', fontFamily:"'Inter',sans-serif" }}>
+      <div style={{ width:'100%', maxWidth:980, display:'grid', gridTemplateColumns:'1fr 1fr', gap:0, background:'#061020', borderRadius:18, overflow:'hidden', border:'1px solid rgba(255,255,255,0.07)', minHeight:580 }}>
 
-        <div style={{ padding:'44px 40px', display:'flex', flexDirection:'column', justifyContent:'space-between', borderRight:'1px solid rgba(255,255,255,0.06)' }}>
+        {/* LEFT PANEL */}
+        <div style={{ padding:'36px 32px', borderRight:'1px solid rgba(255,255,255,0.06)', display:'flex', flexDirection:'column', gap:20 }}>
+
+          {/* Brand */}
           <div>
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
-              <div style={{ width:42, height:42, background:'#1a56db', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, color:'white', fontSize:13, letterSpacing:'0.5px', flexShrink:0 }}>CDC</div>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+              <div style={{ width:40, height:40, background:'#1d4ed8', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, color:'white', fontSize:13, flexShrink:0 }}>CDC</div>
               <div>
-                <div style={{ color:'white', fontSize:16, fontWeight:600, letterSpacing:-0.3, lineHeight:1.2 }}>Career Development Centre</div>
-                <div style={{ color:'rgba(255,255,255,0.28)', fontSize:10, letterSpacing:'0.8px', marginTop:2 }}>MANAV RACHNA EDUCATIONAL INSTITUTIONS · MREI</div>
+                <div style={{ color:'white', fontSize:15, fontWeight:600, lineHeight:1.3 }}>Career Development Centre</div>
+                <div style={{ color:'rgba(255,255,255,0.3)', fontSize:9, letterSpacing:'1px', marginTop:1 }}>MANAV RACHNA EDUCATIONAL INSTITUTIONS · MREI</div>
               </div>
             </div>
-            <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'rgba(26,86,219,0.12)', border:'1px solid rgba(26,86,219,0.25)', color:'#60a5fa', fontSize:11, padding:'4px 10px', borderRadius:20, letterSpacing:'0.5px', margin:'12px 0 18px' }}>
-              <div style={{ width:5, height:5, background:'#60a5fa', borderRadius:'50%' }} />
+            <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(29,78,216,0.15)', border:'1px solid rgba(29,78,216,0.3)', color:'#93c5fd', fontSize:10, padding:'3px 10px', borderRadius:20, letterSpacing:'0.5px' }}>
+              <div style={{ width:5, height:5, background:'#93c5fd', borderRadius:'50%' }} />
               Online Assessment System
             </div>
-            <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-              {['MRIIRS — Deemed University','MRU — State University'].map(u=>(
-                <div key={u} style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:8, padding:'5px 10px', color:'rgba(255,255,255,0.45)', fontSize:10, fontWeight:500 }}>{u}</div>
-              ))}
+          </div>
+
+          {/* University badges */}
+          <div style={{ display:'flex', gap:6 }}>
+            <div style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:6, padding:'4px 9px', color:'rgba(255,255,255,0.4)', fontSize:10 }}>MRIIRS — Deemed University</div>
+            <div style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:6, padding:'4px 9px', color:'rgba(255,255,255,0.4)', fontSize:10 }}>MRU — State University</div>
+          </div>
+
+          {/* Journey label */}
+          <div style={{ color:'rgba(255,255,255,0.25)', fontSize:9, letterSpacing:'2px' }}>3 YEARS · DIGITAL TRANSFORMATION JOURNEY</div>
+
+          {/* Stats grid */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            {STATS.map((s,i) => <StatCard key={i} {...s} />)}
+          </div>
+
+          {/* Ticker */}
+          <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:8, padding:'8px 12px', overflow:'hidden', marginTop:'auto' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:4 }}>
+              <span style={{ width:6, height:6, background:'#22c55e', borderRadius:'50%', display:'inline-block' }} />
+              <span style={{ color:'rgba(255,255,255,0.25)', fontSize:9, letterSpacing:'1px' }}>RECENT ACTIVITY</span>
             </div>
-            <div style={{ color:'rgba(255,255,255,0.28)', fontSize:10, letterSpacing:'2px', marginBottom:14 }}>3 YEARS · DIGITAL TRANSFORMATION JOURNEY</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:18 }}>
-              {STATS.map((s,i)=><StatCard key={i} {...s} />)}
-            </div>
-            <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:10, padding:'10px 14px', overflow:'hidden' }}>
-              <div style={{ color:'rgba(255,255,255,0.25)', fontSize:10, letterSpacing:'1px', marginBottom:5, display:'flex', alignItems:'center', gap:5 }}>
-                <span style={{ display:'inline-block', width:6, height:6, background:'#22c55e', borderRadius:'50%' }} />
-                RECENT ACTIVITY
-              </div>
-              <div style={{ overflow:'hidden' }}>
-                <span style={{ whiteSpace:'nowrap', color:'rgba(255,255,255,0.45)', fontSize:11, display:'inline-block', animation:'cdcScroll 24s linear infinite' }}>{TICKER}</span>
-              </div>
+            <div style={{ overflow:'hidden' }}>
+              <span style={{ whiteSpace:'nowrap', color:'rgba(255,255,255,0.4)', fontSize:10, display:'inline-block', animation:'cdcTicker 25s linear infinite' }}>{TICKER}</span>
             </div>
           </div>
-          <div style={{ marginTop:18, color:'rgba(255,255,255,0.18)', fontSize:10 }}>Faridabad, Haryana, India</div>
+
+          <div style={{ color:'rgba(255,255,255,0.15)', fontSize:9 }}>Faridabad, Haryana, India</div>
         </div>
 
-        <div style={{ padding:'36px 40px', display:'flex', flexDirection:'column', justifyContent:'center' }}>
-          <div style={{ display:'flex', justifyContent:'center', marginBottom:24 }}><AnalogClock /></div>
-          <div style={{ color:'white', fontSize:20, fontWeight:600, letterSpacing:-0.5, marginBottom:3 }}>Welcome back</div>
-          <div style={{ color:'rgba(255,255,255,0.3)', fontSize:12, marginBottom:20 }}>Sign in to CDC Online Assessment System</div>
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom:12 }}>
-              <label style={{ color:'rgba(255,255,255,0.35)', fontSize:10, letterSpacing:'1.5px', display:'block', marginBottom:5 }}>EMAIL ADDRESS</label>
-              <input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}
-                placeholder="yourname.cdc@mriu.edu.in" autoComplete="email"
-                style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.09)', borderRadius:10, padding:'11px 14px', color:'white', fontSize:13, fontFamily:'Inter,sans-serif', outline:'none' }} />
-            </div>
-            <div style={{ marginBottom:6 }}>
-              <label style={{ color:'rgba(255,255,255,0.35)', fontSize:10, letterSpacing:'1.5px', display:'block', marginBottom:5 }}>PASSWORD</label>
-              <div style={{ position:'relative' }}>
-                <input type={showPass?'text':'password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})}
-                  placeholder="Enter your employee code" autoComplete="current-password"
-                  style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.09)', borderRadius:10, padding:'11px 40px 11px 14px', color:'white', fontSize:13, fontFamily:'Inter,sans-serif', outline:'none' }} />
-                <button type="button" onClick={()=>setShowPass(!showPass)}
-                  style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.3)', padding:0, display:'flex' }}>
-                  {showPass?<EyeOff size={16}/>:<Eye size={16}/>}
-                </button>
+        {/* RIGHT PANEL */}
+        <div style={{ padding:'32px', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', gap:20 }}>
+
+          {/* Clock */}
+          <AnalogClock />
+
+          {/* Divider */}
+          <div style={{ width:'100%', height:'1px', background:'rgba(255,255,255,0.06)' }} />
+
+          {/* Form */}
+          <div style={{ width:'100%' }}>
+            <div style={{ color:'white', fontSize:19, fontWeight:600, marginBottom:2, letterSpacing:-0.5 }}>Welcome back</div>
+            <div style={{ color:'rgba(255,255,255,0.3)', fontSize:12, marginBottom:18 }}>Sign in to CDC Online Assessment System</div>
+
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginBottom:12 }}>
+                <label style={{ color:'rgba(255,255,255,0.35)', fontSize:10, letterSpacing:'1.5px', display:'block', marginBottom:5 }}>EMAIL ADDRESS</label>
+                <input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}
+                  placeholder="yourname.cdc@mriu.edu.in" autoComplete="email"
+                  style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'10px 12px', color:'white', fontSize:13, fontFamily:'Inter,sans-serif', outline:'none', boxSizing:'border-box' }} />
               </div>
-              <div style={{ color:'rgba(255,255,255,0.18)', fontSize:10, marginTop:4 }}>Default password is your employee code (e.g. 4500466)</div>
+              <div style={{ marginBottom:6 }}>
+                <label style={{ color:'rgba(255,255,255,0.35)', fontSize:10, letterSpacing:'1.5px', display:'block', marginBottom:5 }}>PASSWORD</label>
+                <div style={{ position:'relative' }}>
+                  <input type={showPass?'text':'password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})}
+                    placeholder="Your employee code" autoComplete="current-password"
+                    style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'10px 38px 10px 12px', color:'white', fontSize:13, fontFamily:'Inter,sans-serif', outline:'none', boxSizing:'border-box' }} />
+                  <button type="button" onClick={()=>setShowPass(!showPass)}
+                    style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.3)', display:'flex', padding:0 }}>
+                    {showPass?<EyeOff size={15}/>:<Eye size={15}/>}
+                  </button>
+                </div>
+                <div style={{ color:'rgba(255,255,255,0.18)', fontSize:10, marginTop:4 }}>Default password is your employee code</div>
+              </div>
+              <button type="submit" disabled={loading}
+                style={{ width:'100%', background:'#1d4ed8', border:'none', borderRadius:8, padding:'11px', color:'white', fontSize:13, fontWeight:600, fontFamily:'Inter,sans-serif', cursor:'pointer', marginTop:8, opacity:loading?0.7:1, letterSpacing:'0.3px' }}>
+                {loading?'Signing in...':'Sign In to Assessment Portal'}
+              </button>
+            </form>
+
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:12 }}>
+              <div style={{ width:3, height:3, borderRadius:'50%', background:'rgba(255,255,255,0.1)' }} />
+              <div style={{ color:'rgba(255,255,255,0.15)', fontSize:10 }}>JWT Encrypted · 8hr Session · Anti-cheat Enabled</div>
+              <div style={{ width:3, height:3, borderRadius:'50%', background:'rgba(255,255,255,0.1)' }} />
             </div>
-            <button type="submit" disabled={loading}
-              style={{ width:'100%', background:'#1a56db', border:'none', borderRadius:10, padding:12, color:'white', fontSize:14, fontWeight:600, fontFamily:'Inter,sans-serif', cursor:'pointer', marginTop:10, letterSpacing:'0.3px', opacity:loading?0.7:1 }}>
-              {loading?'Signing in...':'Sign In to Assessment Portal'}
-            </button>
-          </form>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:12 }}>
-            <div style={{ width:4, height:4, borderRadius:'50%', background:'rgba(255,255,255,0.1)' }} />
-            <div style={{ color:'rgba(255,255,255,0.18)', fontSize:10 }}>JWT Encrypted · 8hr Session · Anti-cheat Enabled</div>
-            <div style={{ width:4, height:4, borderRadius:'50%', background:'rgba(255,255,255,0.1)' }} />
-          </div>
-          <div style={{ borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:18, paddingTop:14, textAlign:'center', color:'rgba(255,255,255,0.18)', fontSize:11 }}>
-            Students — use the exam link shared by your trainer. No login required.
+            <div style={{ borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:14, paddingTop:12, textAlign:'center', color:'rgba(255,255,255,0.2)', fontSize:10 }}>
+              Students — use the exam link shared by your trainer
+            </div>
           </div>
         </div>
       </div>
-      <style>{`@keyframes cdcScroll{0%{transform:translateX(60%)}100%{transform:translateX(-100%)}} input:focus{border-color:rgba(26,86,219,0.6)!important;background:rgba(26,86,219,0.05)!important;} input::placeholder{color:rgba(255,255,255,0.18)!important}`}</style>
+
+      <style>{`
+        @keyframes cdcTicker { 0%{transform:translateX(50%)} 100%{transform:translateX(-100%)} }
+        input:focus { border-color:rgba(29,78,216,0.7)!important; background:rgba(29,78,216,0.08)!important; }
+        input::placeholder { color:rgba(255,255,255,0.2)!important }
+        @media (max-width: 700px) {
+          div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   )
 }
