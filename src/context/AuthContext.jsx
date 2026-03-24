@@ -13,7 +13,7 @@ export function AuthProvider({ children }) {
   const login = async (emp_id, password) => {
     setLoading(true)
     try {
-      const res = await api.post('/auth/login', { emp_id, password })
+      const res = await api.post('/auth/login', { email: emp_id, password })
       const { token, trainer } = res.data
       localStorage.setItem('cdc_token', token)
       localStorage.setItem('cdc_trainer', JSON.stringify(trainer))
