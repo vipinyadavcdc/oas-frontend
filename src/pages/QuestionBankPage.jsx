@@ -113,7 +113,6 @@ export default function QuestionBankPage() {
         </div>
       </div>
 
-      {/* Upload */}
       <div className="card mb-5">
         <h3 className="font-semibold text-sm mb-3" style={{ color: 'var(--color-text)' }}>Bulk Upload (Excel)</h3>
         <div {...getRootProps()} className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all"
@@ -155,7 +154,6 @@ export default function QuestionBankPage() {
         )}
       </div>
 
-      {/* Add Question Form */}
       {showAdd && (
         <div className="card mb-5">
           <h3 className="font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Add New Question</h3>
@@ -227,7 +225,6 @@ export default function QuestionBankPage() {
         </div>
       )}
 
-      {/* Filters */}
       <div className="card mb-5">
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="relative">
@@ -258,7 +255,6 @@ export default function QuestionBankPage() {
         </div>
       </div>
 
-      {/* Questions Table */}
       <div className="card">
         {loading ? (
           <div className="flex justify-center py-12"><div className="spinner" /></div>
