@@ -16,7 +16,7 @@ export default function MonitorPage() {
 
   useEffect(() => {
     loadData()
-    pollRef.current = setInterval(loadData, 10000) // 10s auto-refresh
+    pollRef.current = setInterval(loadData, 30000) // 10s auto-refresh
     return () => clearInterval(pollRef.current)
   }, [])
 
@@ -68,7 +68,7 @@ export default function MonitorPage() {
           <div>
             <h1 className="page-title">Live Monitor</h1>
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-              {data?.exam?.title} · auto-refreshes every 10s
+              {data?.exam?.title} · auto-refreshes every 30s
               {lastRefresh && <span> · last at {lastRefresh.toLocaleTimeString()}</span>}
             </p>
           </div>
