@@ -8,7 +8,7 @@ export default function QuestionBankPage() {
   const [questions, setQuestions] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({ section: '', topic: '', difficulty: '', search: '' })
+  const [filters, setFilters] = useState({ section: '', topic: '', tag: '', difficulty: '', search: '' })
   const [page, setPage] = useState(1)
   const [showAdd, setShowAdd] = useState(false)
   const [uploadResult, setUploadResult] = useState(null)
@@ -16,9 +16,9 @@ export default function QuestionBankPage() {
   const [topics, setTopics] = useState([])
 
   const [newQ, setNewQ] = useState({
-    section: 'aptitude_reasoning', topic: '', question_text: '',
+    section: 'aptitude_reasoning', topic: '', tag: '', question_text: '',
     option_a: '', option_b: '', option_c: '', option_d: '',
-    correct_option: 'A', explanation: '', difficulty: 'medium'
+    correct_option: 'A', difficulty: 'medium'
   })
 
   useEffect(() => { loadQuestions() }, [filters, page])
@@ -48,7 +48,7 @@ export default function QuestionBankPage() {
       await api.post('/questions', newQ)
       toast.success('Question added!')
       setShowAdd(false)
-      setNewQ({ section: 'aptitude_reasoning', topic: '', question_text: '', option_a: '', option_b: '', option_c: '', option_d: '', correct_option: 'A', explanation: '', difficulty: 'medium' })
+      setNewQ({ section: 'aptitude_reasoning', topic: '', tag: '', question_text: '', option_a: '', option_b: '', option_c: '', option_d: '', correct_option: 'A', difficulty: 'medium' })
       loadQuestions()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to add question')
@@ -90,6 +90,12 @@ export default function QuestionBankPage() {
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], 'text/csv': ['.csv'] }, maxFiles: 1 })
+
+  const [masterTags, setMasterTags] = useState([])
+
+  useEffect(() => {
+    api.get('/questions/tags').then(r => setMasterTags(r.data.tags)).catch(() => {})
+  }, [])
 
   const downloadTemplate = async () => {
     try {
@@ -174,9 +180,21 @@ export default function QuestionBankPage() {
               </div>
               <div>
                 <label className="label">Topic *</label>
-                <input className="input" list="topic-list" placeholder="e.g. Time & Work" value={newQ.topic}
-                       onChange={e => setNewQ({...newQ, topic: e.target.value})} required />
-                <datalist id="topic-list">{topics.map(t => <option key={t} value={t} />)}</datalist>
+                <select className="input" value={newQ.topic}
+                  onChange={e => {
+                    const topic = e.target.value
+                    const found = masterTags.find(t => t.topic === topic)
+                    setNewQ({...newQ, topic, tag: found ? found.tag : ''})
+                  }} required>
+                  <option value="">Select topic...</option>
+                  {masterTags.map(t => <option key={t.tag} value={t.topic}>{t.topic}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Tag (auto)</label>
+                <input className="input" value={newQ.tag} readOnly
+                  style={{ background: 'var(--color-surface2)', color: 'var(--color-success)', fontWeight: 'bold' }}
+                  placeholder="Auto from topic" />
               </div>
               <div>
                 <label className="label">Difficulty</label>
@@ -210,11 +228,6 @@ export default function QuestionBankPage() {
                 </div>
               ))}
             </div>
-            <div>
-              <label className="label">Explanation (optional)</label>
-              <textarea className="input" rows={2} placeholder="Explain the correct answer..." value={newQ.explanation}
-                        onChange={e => setNewQ({...newQ, explanation: e.target.value})} />
-            </div>
             <div className="flex gap-3">
               <button type="submit" className="btn-primary"><Plus size={16} /> Add Question</button>
               <button type="button" className="btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
@@ -236,13 +249,16 @@ export default function QuestionBankPage() {
             <option value="aptitude_reasoning">Aptitude & Reasoning</option>
             <option value="verbal">Verbal</option>
           </select>
-          <select className="input" value={filters.difficulty} onChange={e => { setFilters({...filters, difficulty: e.target.value}); setPage(1) }}>
+          <select className="input" value={filters.tag} onChange={e => { setFilters({...filters, tag: e.target.value}); setPage(1) }}>
+            <option value="">All Tags</option>
+            {masterTags.map(t => <option key={t.tag} value={t.tag}>{t.tag} — {t.topic}</option>)}
+          </select>
             <option value="">All Difficulties</option>
             <option value="easy">Easy</option>
             <option value="medium">Medium</option>
             <option value="hard">Hard</option>
           </select>
-          <button className="btn-secondary" onClick={() => { setFilters({ section:'', topic:'', difficulty:'', search:'' }); setPage(1) }}>
+          <button className="btn-secondary" onClick={() => { setFilters({ section:'', topic:'', tag:'', difficulty:'', search:'' }); setPage(1) }}>
             Clear Filters
           </button>
         </div>
@@ -266,6 +282,7 @@ export default function QuestionBankPage() {
                     <th style={{ width: '40%' }}>Question</th>
                     <th>Section</th>
                     <th>Topic</th>
+                    <th>Tag</th>
                     <th>Difficulty</th>
                     <th>Answer</th>
                     <th>Used</th>
@@ -284,6 +301,9 @@ export default function QuestionBankPage() {
                         </span>
                       </td>
                       <td className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{q.topic}</td>
+                      <td>
+                        <span className="badge badge-success text-xs font-mono font-bold">{q.tag || '—'}</span>
+                      </td>
                       <td>
                         <span className={`badge ${q.difficulty === 'easy' ? 'badge-success' : q.difficulty === 'hard' ? 'badge-danger' : 'badge-warning'}`}>
                           {q.difficulty}
