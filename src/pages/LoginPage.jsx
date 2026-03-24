@@ -1,224 +1,286 @@
-import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
-import toast from 'react-hot-toast'
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 const STATS = [
-  { target: 26000, suffix: '+', label: 'Exams Conducted',   blue: true,  delay: 300 },
-  { target: 5000,  suffix: '+', label: 'Students Assessed', blue: false, delay: 450 },
-  { target: 12000, suffix: '+', label: 'Questions in Bank', blue: false, delay: 600 },
-  { target: 192,   suffix: '',  label: 'Avg Students/Exam', blue: false, delay: 750 },
-]
+  { target: 26000, suffix: '+', label: 'Exams Conducted' },
+  { target: 5000,  suffix: '+', label: 'Students Assessed' },
+  { target: 12000, suffix: '+', label: 'Questions in Bank' },
+  { target: 192,   suffix: '',  label: 'Avg Students/Exam' },
+];
 
-const TICKER = 'Aptitude Assessment — 187 students — MRIIRS \u00a0|\u00a0 Verbal Reasoning Test — 142 students — MRU \u00a0|\u00a0 Campus Placement Mock — 234 students — MRIIRS \u00a0|\u00a0 Quantitative Ability Drive — 98 students — MRU \u00a0|\u00a0 Logical Reasoning — 176 students — MRIIRS \u00a0|\u00a0 Communication Skills — 121 students — MRU \u00a0|\u00a0 Pre-Placement Assessment — 209 students — MRIIRS'
+const TICKER_ITEMS = [
+  'Online Assessment System — CDC, MREI',
+  '26,000+ Exams Conducted in 3 Years',
+  '5,000+ Students Assessed Across MRIIRS & MRU',
+  'Aptitude | Verbal | Reasoning — All in One Platform',
+  'Anti-Cheat Enabled — Secure & Fair Assessments',
+  'Real-Time Monitoring & Analytics Dashboard',
+  'Bulk Question Upload with Auto Tag Mapping',
+];
 
-function StatCard({ target, suffix, label, blue, delay }) {
-  const [val, setVal] = useState(0)
+const BARS = [
+  { label: 'Aptitude & Reasoning', pct: 92, color: '#3b82f6' },
+  { label: 'Verbal Skills',        pct: 87, color: '#10b981' },
+  { label: 'Mock Assessments',     pct: 95, color: '#8b5cf6' },
+  { label: 'Campus Placement',     pct: 83, color: '#f59e0b' },
+];
+
+function useCountUp(target, duration = 1600, delay = 0) {
+  const [val, setVal] = useState(0);
   useEffect(() => {
-    const t = setTimeout(() => {
-      const start = performance.now()
-      function update(now) {
-        const p = Math.min((now - start) / 2000, 1)
-        const ease = 1 - Math.pow(1 - p, 3)
-        setVal(Math.round(ease * target))
-        if (p < 1) requestAnimationFrame(update)
-      }
-      requestAnimationFrame(update)
-    }, delay)
-    return () => clearTimeout(t)
-  }, [target, delay])
-  return (
-    <div style={{ background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:10, padding:'12px 14px' }}>
-      <div style={{ fontSize:22, fontWeight:700, letterSpacing:-1, lineHeight:1, color: blue?'#3b82f6':'white' }}>
-        {val.toLocaleString()}{suffix}
-      </div>
-      <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', marginTop:3 }}>{label}</div>
-    </div>
-  )
+    let raf;
+    const timeout = setTimeout(() => {
+      const start = performance.now();
+      const tick = (now) => {
+        const elapsed = Math.max(0, now - start);
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setVal(Math.round(eased * target));
+        if (progress < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, delay);
+    return () => { clearTimeout(timeout); cancelAnimationFrame(raf); };
+  }, [target, duration, delay]);
+  return val;
 }
 
-function AnalogClock() {
-  const canvasRef = useRef(null)
-  const [dateStr, setDateStr] = useState('')
-  const [timeStr, setTimeStr] = useState('')
-  const rafRef = useRef(null)
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    const cx = 75, cy = 75, r = 68
-    function draw() {
-      const now = new Date()
-      const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds(), ms = now.getMilliseconds()
-      ctx.clearRect(0, 0, 150, 150)
-      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#0d1f3c'; ctx.fill()
-      ctx.strokeStyle='rgba(59,130,246,0.5)'; ctx.lineWidth=1.5; ctx.stroke()
-      ctx.beginPath(); ctx.arc(cx,cy,r-8,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1; ctx.stroke()
-      for(let i=0;i<60;i++){
-        const a=(i/60)*Math.PI*2-Math.PI/2, isMaj=i%5===0
-        ctx.beginPath()
-        ctx.moveTo(cx+Math.cos(a)*(isMaj?r-12:r-7), cy+Math.sin(a)*(isMaj?r-12:r-7))
-        ctx.lineTo(cx+Math.cos(a)*(r-3), cy+Math.sin(a)*(r-3))
-        ctx.strokeStyle=isMaj?'rgba(255,255,255,0.6)':'rgba(255,255,255,0.15)'; ctx.lineWidth=isMaj?1.5:0.8; ctx.stroke()
-      }
-      for(let i=0;i<12;i++){
-        const a=(i/12)*Math.PI*2-Math.PI/2
-        ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='7px Inter,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'
-        ctx.fillText(i===0?12:i, cx+Math.cos(a)*(r-19), cy+Math.sin(a)*(r-19))
-      }
-      function hand(angle,length,width,color){
-        ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle)
-        ctx.beginPath(); ctx.moveTo(0,length*0.2); ctx.lineTo(0,-length)
-        ctx.strokeStyle=color; ctx.lineWidth=width; ctx.lineCap='round'; ctx.stroke(); ctx.restore()
-      }
-      hand(((h+m/60+s/3600)/12)*Math.PI*2-Math.PI/2, r*0.5, 2.5, 'rgba(255,255,255,0.95)')
-      hand(((m+s/60)/60)*Math.PI*2-Math.PI/2, r*0.68, 2, 'rgba(255,255,255,0.75)')
-      hand(((s+ms/1000)/60)*Math.PI*2-Math.PI/2, r*0.75, 1, '#3b82f6')
-      ctx.beginPath(); ctx.arc(cx,cy,3.5,0,Math.PI*2); ctx.fillStyle='#3b82f6'; ctx.fill()
-      ctx.beginPath(); ctx.arc(cx,cy,1.5,0,Math.PI*2); ctx.fillStyle='white'; ctx.fill()
-      const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-      const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-      setDateStr(days[now.getDay()]+', '+now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear())
-      setTimeStr(String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0'))
-      rafRef.current = requestAnimationFrame(draw)
-    }
-    draw()
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [])
+function AnimStat({ target, suffix, label, delay }) {
+  const val = useCountUp(target, 1600, delay);
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
-      <canvas ref={canvasRef} width={150} height={150} />
-      <div style={{ color:'rgba(255,255,255,0.4)', fontSize:11, letterSpacing:'0.5px' }}>{dateStr}</div>
-      <div style={{ color:'rgba(255,255,255,0.2)', fontSize:10, letterSpacing:3 }}>{timeStr}</div>
+    <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '14px 16px' }}>
+      <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', lineHeight: 1 }}>
+        {val.toLocaleString()}<span style={{ color: '#3b82f6' }}>{suffix}</span>
+      </div>
+      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
     </div>
-  )
+  );
+}
+
+function AnimBar({ label, pct, color, delay }) {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setWidth(pct), delay + 300);
+    return () => clearTimeout(t);
+  }, [pct, delay]);
+  return (
+    <div style={{ marginBottom: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginBottom: '5px' }}>
+        <span>{label}</span>
+        <span style={{ color, fontWeight: '600' }}>{pct}%</span>
+      </div>
+      <div style={{ height: '5px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+        <div style={{ height: '100%', background: color, borderRadius: '3px', width: `${width}%`, transition: 'width 1.2s cubic-bezier(0.4,0,0.2,1)' }} />
+      </div>
+    </div>
+  );
 }
 
 export default function LoginPage() {
-  const [form, setForm] = useState({ email:'', password:'' })
-  const [showPass, setShowPass] = useState(false)
-  const { login, loading } = useAuth()
-  const navigate = useNavigate()
+  const navigate = useNavigate();
+  const { login, loading } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState('');
+  const tickerRef = useRef(null);
+  const animRef = useRef(null);
+  const posRef = useRef(0);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!form.email || !form.password) return toast.error('Enter email and password')
-    const res = await login(form.email, form.password)
-    if (res.success) { toast.success('Welcome back!'); navigate('/dashboard') }
-    else toast.error(res.error || 'Login failed')
-  }
+  useEffect(() => {
+    const speed = 0.4;
+    const animate = () => {
+      posRef.current -= speed;
+      if (tickerRef.current) {
+        const w = tickerRef.current.scrollWidth / 2;
+        if (Math.abs(posRef.current) >= w) posRef.current = 0;
+        tickerRef.current.style.transform = `translateX(${posRef.current}px)`;
+      }
+      animRef.current = requestAnimationFrame(animate);
+    };
+    animRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animRef.current);
+  }, []);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!email || !password) return setError('Email and password are required');
+    const res = await login(email.trim(), password.trim());
+    if (res.success) {
+      toast.success('Welcome back!');
+      navigate('/dashboard');
+    } else {
+      setError(res.error || 'Login failed. Check your credentials.');
+    }
+  };
+
+  const tickerContent = [...TICKER_ITEMS, ...TICKER_ITEMS];
 
   return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#030b18', padding:'16px', fontFamily:"'Inter',sans-serif" }}>
-      <div style={{ width:'100%', maxWidth:980, display:'grid', gridTemplateColumns:'1fr 1fr', gap:0, background:'#061020', borderRadius:18, overflow:'hidden', border:'1px solid rgba(255,255,255,0.07)', minHeight:580 }}>
+    <div style={{ minHeight: '100vh', display: 'flex', fontFamily: 'Segoe UI,Arial,sans-serif', background: '#060e1a' }}>
 
-        {/* LEFT PANEL */}
-        <div style={{ padding:'36px 32px', borderRight:'1px solid rgba(255,255,255,0.06)', display:'flex', flexDirection:'column', gap:20 }}>
+      {/* LEFT PANEL */}
+      <div style={{ flex: '1 1 0', background: 'linear-gradient(160deg,#0a1628 0%,#0f2240 50%,#0a1a34 100%)', display: 'flex', flexDirection: 'column', padding: '40px 44px', position: 'relative', overflow: 'hidden', minWidth: 0 }}>
 
-          {/* Brand */}
-          <div>
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-              <div style={{ width:40, height:40, background:'#1d4ed8', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, color:'white', fontSize:13, flexShrink:0 }}>CDC</div>
-              <div>
-                <div style={{ color:'white', fontSize:15, fontWeight:600, lineHeight:1.3 }}>Career Development Centre</div>
-                <div style={{ color:'rgba(255,255,255,0.3)', fontSize:9, letterSpacing:'1px', marginTop:1 }}>MANAV RACHNA EDUCATIONAL INSTITUTIONS · MREI</div>
-              </div>
-            </div>
-            <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(29,78,216,0.15)', border:'1px solid rgba(29,78,216,0.3)', color:'#93c5fd', fontSize:10, padding:'3px 10px', borderRadius:20, letterSpacing:'0.5px' }}>
-              <div style={{ width:5, height:5, background:'#93c5fd', borderRadius:'50%' }} />
-              Online Assessment System
-            </div>
+        {[
+          { w: 320, h: 320, bg: '#1d4ed8', top: '-80px', right: '-60px', opacity: 0.06 },
+          { w: 200, h: 200, bg: '#10b981', bottom: '60px', left: '-40px', opacity: 0.06 },
+          { w: 160, h: 160, bg: '#8b5cf6', top: '45%', right: '10%', opacity: 0.04 },
+        ].map((o, i) => (
+          <div key={i} style={{ position: 'absolute', width: o.w, height: o.h, borderRadius: '50%', background: o.bg, top: o.top, bottom: o.bottom, left: o.left, right: o.right, opacity: o.opacity, pointerEvents: 'none' }} />
+        ))}
+
+        {/* Brand */}
+        <div style={{ marginBottom: '32px', position: 'relative', zIndex: 2 }}>
+          <div style={{ width: '48px', height: '48px', background: '#1d4ed8', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', marginBottom: '12px' }}>🎓</div>
+          <div style={{ fontSize: '20px', fontWeight: '700', color: '#fff' }}>CDC Online Assessment System</div>
+          <div style={{ fontSize: '13px', color: '#64748b', marginTop: '3px' }}>Career Development Centre — Manav Rachna Educational Institutions</div>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+            <span style={{ background: 'rgba(29,78,216,0.2)', border: '1px solid rgba(29,78,216,0.4)', color: '#93c5fd', fontSize: '10px', padding: '3px 10px', borderRadius: '20px' }}>MRIIRS — Deemed University</span>
+            <span style={{ background: 'rgba(29,78,216,0.2)', border: '1px solid rgba(29,78,216,0.4)', color: '#93c5fd', fontSize: '10px', padding: '3px 10px', borderRadius: '20px' }}>MRU — State University</span>
           </div>
-
-          {/* University badges */}
-          <div style={{ display:'flex', gap:6 }}>
-            <div style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:6, padding:'4px 9px', color:'rgba(255,255,255,0.4)', fontSize:10 }}>MRIIRS — Deemed University</div>
-            <div style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:6, padding:'4px 9px', color:'rgba(255,255,255,0.4)', fontSize:10 }}>MRU — State University</div>
-          </div>
-
-          {/* Journey label */}
-          <div style={{ color:'rgba(255,255,255,0.25)', fontSize:9, letterSpacing:'2px' }}>3 YEARS · DIGITAL TRANSFORMATION JOURNEY</div>
-
-          {/* Stats grid */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-            {STATS.map((s,i) => <StatCard key={i} {...s} />)}
-          </div>
-
-          {/* Ticker */}
-          <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:8, padding:'8px 12px', overflow:'hidden', marginTop:'auto' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:4 }}>
-              <span style={{ width:6, height:6, background:'#22c55e', borderRadius:'50%', display:'inline-block' }} />
-              <span style={{ color:'rgba(255,255,255,0.25)', fontSize:9, letterSpacing:'1px' }}>RECENT ACTIVITY</span>
-            </div>
-            <div style={{ overflow:'hidden' }}>
-              <span style={{ whiteSpace:'nowrap', color:'rgba(255,255,255,0.4)', fontSize:10, display:'inline-block', animation:'cdcTicker 25s linear infinite' }}>{TICKER}</span>
-            </div>
-          </div>
-
-          <div style={{ color:'rgba(255,255,255,0.15)', fontSize:9 }}>Faridabad, Haryana, India</div>
         </div>
 
-        {/* RIGHT PANEL */}
-        <div style={{ padding:'32px', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', gap:20 }}>
-
-          {/* Clock */}
-          <AnalogClock />
-
-          {/* Divider */}
-          <div style={{ width:'100%', height:'1px', background:'rgba(255,255,255,0.06)' }} />
-
-          {/* Form */}
-          <div style={{ width:'100%' }}>
-            <div style={{ color:'white', fontSize:19, fontWeight:600, marginBottom:2, letterSpacing:-0.5 }}>Welcome back</div>
-            <div style={{ color:'rgba(255,255,255,0.3)', fontSize:12, marginBottom:18 }}>Sign in to CDC Online Assessment System</div>
-
-            <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom:12 }}>
-                <label style={{ color:'rgba(255,255,255,0.35)', fontSize:10, letterSpacing:'1.5px', display:'block', marginBottom:5 }}>EMAIL ADDRESS</label>
-                <input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}
-                  placeholder="yourname.cdc@mriu.edu.in" autoComplete="email"
-                  style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'10px 12px', color:'white', fontSize:13, fontFamily:'Inter,sans-serif', outline:'none', boxSizing:'border-box' }} />
+        {/* Ticker */}
+        <div style={{ background: 'rgba(29,78,216,0.15)', border: '1px solid rgba(29,78,216,0.3)', borderRadius: '8px', padding: '10px 14px', overflow: 'hidden', marginBottom: '24px', position: 'relative', zIndex: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '7px', height: '7px', background: '#3b82f6', borderRadius: '50%', flexShrink: 0, animation: 'pulse 1.5s infinite' }} />
+            <div style={{ overflow: 'hidden', flex: 1 }}>
+              <div ref={tickerRef} style={{ display: 'flex', gap: '40px', whiteSpace: 'nowrap', willChange: 'transform' }}>
+                {tickerContent.map((t, i) => (
+                  <span key={i} style={{ fontSize: '12px', color: '#93c5fd', flexShrink: 0 }}>{t}</span>
+                ))}
               </div>
-              <div style={{ marginBottom:6 }}>
-                <label style={{ color:'rgba(255,255,255,0.35)', fontSize:10, letterSpacing:'1.5px', display:'block', marginBottom:5 }}>PASSWORD</label>
-                <div style={{ position:'relative' }}>
-                  <input type={showPass?'text':'password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})}
-                    placeholder="Your employee code" autoComplete="current-password"
-                    style={{ width:'100%', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'10px 38px 10px 12px', color:'white', fontSize:13, fontFamily:'Inter,sans-serif', outline:'none', boxSizing:'border-box' }} />
-                  <button type="button" onClick={()=>setShowPass(!showPass)}
-                    style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.3)', display:'flex', padding:0 }}>
-                    {showPass?<EyeOff size={15}/>:<Eye size={15}/>}
-                  </button>
-                </div>
-                <div style={{ color:'rgba(255,255,255,0.18)', fontSize:10, marginTop:4 }}>Default password is your employee code</div>
-              </div>
-              <button type="submit" disabled={loading}
-                style={{ width:'100%', background:'#1d4ed8', border:'none', borderRadius:8, padding:'11px', color:'white', fontSize:13, fontWeight:600, fontFamily:'Inter,sans-serif', cursor:'pointer', marginTop:8, opacity:loading?0.7:1, letterSpacing:'0.3px' }}>
-                {loading?'Signing in...':'Sign In to Assessment Portal'}
-              </button>
-            </form>
-
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:12 }}>
-              <div style={{ width:3, height:3, borderRadius:'50%', background:'rgba(255,255,255,0.1)' }} />
-              <div style={{ color:'rgba(255,255,255,0.15)', fontSize:10 }}>JWT Encrypted · 8hr Session · Anti-cheat Enabled</div>
-              <div style={{ width:3, height:3, borderRadius:'50%', background:'rgba(255,255,255,0.1)' }} />
             </div>
-            <div style={{ borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:14, paddingTop:12, textAlign:'center', color:'rgba(255,255,255,0.2)', fontSize:10 }}>
-              Students — use the exam link shared by your trainer
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px', position: 'relative', zIndex: 2 }}>
+          {STATS.map((s, i) => <AnimStat key={i} {...s} delay={i * 150} />)}
+        </div>
+
+        {/* Training bars */}
+        <div style={{ position: 'relative', zIndex: 2, marginBottom: '24px' }}>
+          <div style={{ fontSize: '11px', color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Assessment Coverage</div>
+          {BARS.map((b, i) => <AnimBar key={i} {...b} delay={i * 200} />)}
+        </div>
+
+        {/* 3 years badge */}
+        <div style={{ position: 'relative', zIndex: 2, marginTop: 'auto' }}>
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ fontSize: '28px' }}>🏆</div>
+            <div>
+              <div style={{ color: '#fff', fontSize: '13px', fontWeight: '600' }}>3 Years of Digital Excellence</div>
+              <div style={{ color: '#64748b', fontSize: '11px', marginTop: '2px' }}>Fully online since 2022 — Anti-cheat · Real-time · Paperless</div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* RIGHT PANEL */}
+      <div style={{ width: '380px', flexShrink: 0, background: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '48px 40px' }}>
+
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{ width: '60px', height: '60px', background: '#0f2240', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', margin: '0 auto 14px' }}>🎓</div>
+          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '700', color: '#0f172a' }}>Welcome back</h1>
+          <p style={{ margin: '5px 0 0', fontSize: '13px', color: '#64748b' }}>Sign in to CDC Online Assessment System</p>
+        </div>
+
+        <form onSubmit={handleLogin}>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Email Address</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="yourname.cdc@mriu.edu.in"
+              style={{ width: '100%', padding: '12px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' }}
+              onFocus={e => e.target.style.borderColor = '#1d4ed8'}
+              onBlur={e => e.target.style.borderColor = '#e5e7eb'} />
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Password</label>
+            <div style={{ position: 'relative' }}>
+              <input type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="Your employee code"
+                style={{ width: '100%', padding: '12px 46px 12px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' }}
+                onFocus={e => e.target.style.borderColor = '#1d4ed8'}
+                onBlur={e => e.target.style.borderColor = '#e5e7eb'} />
+              <button type="button" onClick={() => setShowPass(!showPass)}
+                style={{ position: 'absolute', right: '13px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9ca3af', padding: 0 }}>
+                {showPass ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <p style={{ margin: '5px 0 0', fontSize: '11px', color: '#9ca3af' }}>Default password is your employee code (e.g. 4500466)</p>
+          </div>
+
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', padding: '11px 14px', borderRadius: '10px', marginBottom: '16px', fontSize: '13px' }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <button type="submit" disabled={loading}
+            style={{ width: '100%', padding: '14px', background: loading ? '#9ca3af' : '#0f2240', color: 'white', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: '700', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'background 0.2s' }}
+            onMouseEnter={e => { if (!loading) e.target.style.background = '#1d4ed8'; }}
+            onMouseLeave={e => { if (!loading) e.target.style.background = '#0f2240'; }}>
+            {loading ? 'Signing in...' : 'Sign In →'}
+          </button>
+        </form>
+
+        <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          {[
+            { icon: '🔒', text: 'Secure Login' },
+            { icon: '🏛️', text: 'MREI Internal' },
+            { icon: '📱', text: 'Any Device' },
+            { icon: '🔄', text: 'Live Sync' },
+          ].map(b => (
+            <div key={b.text} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: '#f8fafc', borderRadius: '8px', padding: '9px 12px' }}>
+              <span style={{ fontSize: '14px' }}>{b.icon}</span>
+              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>{b.text}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quick Links</div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[
+              { label: 'EMS Portal', icon: '🖥️', url: 'https://mrei.icloudems.com/' },
+              { label: 'HR One',     icon: '👔', url: 'https://app.hrone.cloud/login' },
+              { label: 'CDC Drive',  icon: '📁', url: 'https://drive.google.com/drive/my-drive' },
+            ].map(link => (
+              <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer"
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 6px', textDecoration: 'none', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
+                <span style={{ fontSize: '18px' }}>{link.icon}</span>
+                <span style={{ fontSize: '10px', color: '#475569', fontWeight: '600', textAlign: 'center' }}>{link.label}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '11px', color: '#cbd5e1' }}>
+          Students — use the exam link shared by your trainer
+        </p>
+        <p style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#e2e8f0' }}>
+          © 2026 Manav Rachna Educational Institutions
+        </p>
+      </div>
+
       <style>{`
-        @keyframes cdcTicker { 0%{transform:translateX(50%)} 100%{transform:translateX(-100%)} }
-        input:focus { border-color:rgba(29,78,216,0.7)!important; background:rgba(29,78,216,0.08)!important; }
-        input::placeholder { color:rgba(255,255,255,0.2)!important }
-        @media (max-width: 700px) {
-          div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+        @keyframes pulse {
+          0%,100% { opacity:1; transform:scale(1); }
+          50% { opacity:0.4; transform:scale(0.75); }
+        }
+        @media (max-width: 768px) {
+          div[style*="flex: 1 1 0"] { display: none !important; }
+          div[style*="width: 380px"] { width: 100% !important; }
         }
       `}</style>
     </div>
-  )
+  );
 }
