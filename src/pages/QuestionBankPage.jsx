@@ -1,12 +1,17 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { Plus, Upload, Download, Search, BookOpen, Archive, Trash2, BarChart2 } from 'lucide-react'
+import { Plus, Upload, Download, Search, BookOpen, Archive, Trash2, BarChart2, RotateCcw } from 'lucide-react'
 import api from '../utils/api'
+import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 
 export default function QuestionBankPage() {
   const navigate = useNavigate()
+  const { isMasterAdmin } = useAuth()
+  const [tab, setTab] = useState('active')
+  const [archived, setArchived] = useState([])
+  const [archivedLoading, setArchivedLoading] = useState(false)
   const [questions, setQuestions] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -37,6 +42,37 @@ export default function QuestionBankPage() {
       setTotal(res.data.total)
     } catch { toast.error('Failed to load questions') }
     finally { setLoading(false) }
+  }
+
+  const loadArchived = async () => {
+    setArchivedLoading(true)
+    try {
+      const res = await api.get('/questions', { params: { archived: 'true', limit: 5000 } })
+      setArchived(res.data.questions)
+    } catch { toast.error('Failed to load archived questions') }
+    finally { setArchivedLoading(false) }
+  }
+
+  const handleRestore = async (id) => {
+    try {
+      await api.patch('/questions/' + id, { is_archived: false, is_active: true })
+      toast.success('Question restored!')
+      setArchived(prev => prev.filter(q => q.id !== id))
+    } catch { toast.error('Failed to restore') }
+  }
+
+  const handleHardDelete = async (id) => {
+    if (!confirm('PERMANENTLY delete this question? This cannot be undone!')) return
+    try {
+      await api.delete('/questions/' + id)
+      toast.success('Question permanently deleted')
+      setArchived(prev => prev.filter(q => q.id !== id))
+    } catch { toast.error('Failed to delete') }
+  }
+
+  const handleTabChange = (t) => {
+    setTab(t)
+    if (t === 'archived') loadArchived()
   }
 
   const handleAddQuestion = async (e) => {
@@ -117,6 +153,70 @@ export default function QuestionBankPage() {
         </div>
       </div>
 
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button onClick={() => handleTabChange('active')}
+          className={tab === 'active' ? 'btn-primary' : 'btn-secondary'}
+          style={{ fontSize: 13 }}>
+          Active Questions
+        </button>
+        <button onClick={() => handleTabChange('archived')}
+          className={tab === 'archived' ? 'btn-primary' : 'btn-secondary'}
+          style={{ fontSize: 13 }}>
+          <Archive size={14} /> Archived {archived.length > 0 && '(' + archived.length + ')'}
+        </button>
+        <button onClick={() => navigate('/questions/analytics')} className="btn-secondary" style={{ fontSize: 13, marginLeft: 'auto' }}>
+          <BarChart2 size={14} /> Analytics
+        </button>
+      </div>
+
+      {/* ARCHIVED TAB */}
+      {tab === 'archived' && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <h3 style={{ fontWeight: 700, color: 'var(--color-text)' }}>Archived Questions ({archived.length})</h3>
+            <button onClick={loadArchived} className="btn-secondary" style={{ fontSize: 12 }}>Refresh</button>
+          </div>
+          {archivedLoading ? (
+            <div className="flex justify-center py-12"><div className="spinner" /></div>
+          ) : archived.length === 0 ? (
+            <div className="text-center py-12">
+              <Archive size={40} className="mx-auto mb-3 opacity-30" />
+              <p style={{ color: 'var(--color-text-muted)' }}>No archived questions</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {archived.map(q => (
+                <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--color-surface2)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, color: 'var(--color-text)', margin: 0 }}>{q.question_text}</p>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
+                      <span className="badge badge-info text-xs">{q.section === 'aptitude_reasoning' ? 'Aptitude' : 'Verbal'}</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{q.topic}</span>
+                      <span className="badge badge-success text-xs font-mono">{q.tag}</span>
+                      <span className={`badge text-xs ${q.difficulty === 'easy' ? 'badge-success' : q.difficulty === 'hard' ? 'badge-danger' : 'badge-warning'}`}>{q.difficulty}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => handleRestore(q.id)} title="Restore"
+                      style={{ background: 'var(--color-success)', color: 'white', border: 'none', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                      <RotateCcw size={13} /> Restore
+                    </button>
+                    {isMasterAdmin && (
+                      <button onClick={() => handleHardDelete(q.id)} title="Permanently Delete"
+                        style={{ background: 'var(--color-danger)', color: 'white', border: 'none', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'active' && <>
       {/* Upload */}
       <div className="card mb-5">
         <h3 className="font-semibold text-sm mb-3" style={{ color: 'var(--color-text)' }}>Bulk Upload (Excel)</h3>
@@ -341,5 +441,7 @@ export default function QuestionBankPage() {
         )}
       </div>
     </div>
+    </>
+    }
   )
 }
