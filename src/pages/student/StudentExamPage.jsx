@@ -194,7 +194,17 @@ export default function StudentExamPage() {
 
   const startHeartbeat = () => {
     heartbeatTimer.current = setInterval(async () => {
-      try { await api.post('/exam/heartbeat', { session_token: sessionToken.current }) } catch {}
+      try {
+        const res = await api.post('/exam/heartbeat', { session_token: sessionToken.current })
+        if (res.data.extraMinutes > 0) {
+          extraMinutes.current += res.data.extraMinutes
+          toast.success('+' + res.data.extraMinutes + ' minutes added by trainer!')
+        }
+        if (res.data.alive === false) {
+          toast.error('Your session has been ended by the trainer')
+          handleAutoSubmit('session_ended')
+        }
+      } catch {}
     }, 30000)
   }
 
