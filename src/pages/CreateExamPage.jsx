@@ -80,7 +80,9 @@ export default function CreateExamPage() {
     department: '', section_filter: '', duration_minutes: 60,
     start_time: '', end_time: '',
     marks_per_question: 1, negative_marking: false, negative_marks: 0.25,
-    randomize_questions: true, randomize_options: true
+    randomize_questions: true, randomize_options: true,
+    aptitude_time_minutes: 0, verbal_time_minutes: 0,
+    device_allowed: 'both'
   })
 
   // Domain counts
@@ -209,7 +211,10 @@ export default function CreateExamPage() {
         verbal_count: verSelected,
         total_questions: aptSelected + verSelected,
         start_time: form.start_time ? new Date(form.start_time).toISOString() : null,
-        end_time: form.end_time ? new Date(form.end_time).toISOString() : null
+        end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
+        aptitude_time_minutes: form.aptitude_time_minutes || 0,
+        verbal_time_minutes: form.verbal_time_minutes || 0,
+        device_allowed: form.device_allowed || 'both'
       }
 
       let examId = id
@@ -406,6 +411,46 @@ export default function CreateExamPage() {
                 <input type="checkbox" checked={form.randomize_options} onChange={e => setForm({...form, randomize_options: e.target.checked})} />
                 <span className="text-sm" style={{ color: 'var(--color-text)' }}>Randomize Options</span>
               </label>
+            </div>
+
+            <div style={{ padding: 16, background: 'var(--color-surface2)', borderRadius: 10 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text)', marginBottom: 10 }}>Section-wise Time (optional)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="label">Aptitude Time (min)</label>
+                  <input type="number" className="input" min={0} value={form.aptitude_time_minutes}
+                    onChange={e => setForm({...form, aptitude_time_minutes: parseInt(e.target.value)||0})}
+                    placeholder="0 = use total time" />
+                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>0 = no section time limit</p>
+                </div>
+                <div>
+                  <label className="label">Verbal Time (min)</label>
+                  <input type="number" className="input" min={0} value={form.verbal_time_minutes}
+                    onChange={e => setForm({...form, verbal_time_minutes: parseInt(e.target.value)||0})}
+                    placeholder="0 = use total time" />
+                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>0 = no section time limit</p>
+                </div>
+              </div>
+              {form.aptitude_time_minutes > 0 && form.verbal_time_minutes > 0 &&
+               (form.aptitude_time_minutes + form.verbal_time_minutes) !== form.duration_minutes && (
+                <div style={{ marginTop: 8, padding: '6px 10px', background: 'var(--color-danger)15', borderRadius: 6, fontSize: 12, color: 'var(--color-danger)' }}>
+                  Warning: Section times ({form.aptitude_time_minutes + form.verbal_time_minutes} min) don't match total duration ({form.duration_minutes} min)
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: 16, background: 'var(--color-surface2)', borderRadius: 10 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text)', marginBottom: 10 }}>Device Allowed</div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                {[['both','Both (Desktop + Mobile)'],['desktop','Desktop Only'],['mobile','Mobile Only']].map(([val, label]) => (
+                  <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                    <input type="radio" name="device_allowed" value={val}
+                      checked={form.device_allowed === val}
+                      onChange={() => setForm({...form, device_allowed: val})} />
+                    <span style={{ fontSize: 13, color: 'var(--color-text)' }}>{label}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         </div>

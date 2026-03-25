@@ -156,7 +156,11 @@ export default function ResultsPage() {
                       <td className="font-mono text-xs">{parseFloat(r.verbal_score||0).toFixed(1)}</td>
                       <td className="font-mono text-sm" style={{ color: 'var(--color-success)' }}>{r.correct||0}</td>
                       <td className="font-mono text-sm" style={{ color: 'var(--color-danger)' }}>{r.incorrect||0}</td>
-                      <td className="text-xs">{r.time_taken_seconds ? Math.round(r.time_taken_seconds/60)+'m' : '—'}</td>
+                      <td className="text-xs">
+                        <div>{r.time_taken_seconds ? Math.round(r.time_taken_seconds/60)+'m total' : '—'}</div>
+                        {r.aptitude_time_used > 0 && <div style={{ color: 'var(--color-primary)', fontSize: 10 }}>Apt: {Math.round(r.aptitude_time_used/60)}m</div>}
+                        {r.verbal_time_used > 0 && <div style={{ color: 'var(--color-warning)', fontSize: 10 }}>Ver: {Math.round(r.verbal_time_used/60)}m</div>}
+                      </td>
                       <td>{r.is_flagged
                         ? <span className="badge badge-danger">⚠️ {r.tab_switches||0}t</span>
                         : <span className="badge badge-success">Clean</span>}
