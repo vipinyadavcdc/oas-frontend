@@ -21,6 +21,7 @@ export default function QuestionBankPage() {
   const [masterTags, setMasterTags] = useState([])
   const [archived, setArchived] = useState([])
   const [archivedLoading, setArchivedLoading] = useState(false)
+  const [selectedArchived, setSelectedArchived] = useState([])
 
   const [newQ, setNewQ] = useState({
     section: 'aptitude_reasoning', topic: '', tag: '', question_text: '',
@@ -73,6 +74,22 @@ export default function QuestionBankPage() {
       toast.success('Question permanently deleted')
       setArchived(prev => prev.filter(q => q.id !== id))
     } catch (err) { toast.error(err.response?.data?.error || 'Failed to delete') }
+  }
+
+  const handleSelectAllArchived = () => {
+    setSelectedArchived(archived.map(q => q.id))
+  }
+
+  const handleBulkHardDelete = async () => {
+    if (!selectedArchived.length) return
+    if (!confirm('PERMANENTLY delete ' + selectedArchived.length + ' questions? This cannot be undone!')) return
+    let done = 0
+    for (const id of selectedArchived) {
+      try { await api.delete('/questions/' + id); done++ } catch {}
+    }
+    toast.success(done + ' questions permanently deleted')
+    setArchived(prev => prev.filter(q => !selectedArchived.includes(q.id)))
+    setSelectedArchived([])
   }
 
   const handleAddQuestion = async (e) => {
@@ -166,7 +183,20 @@ export default function QuestionBankPage() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <h3 style={{ fontWeight: 700, color: 'var(--color-text)' }}>Archived Questions ({archived.length})</h3>
-            <button onClick={loadArchived} className="btn-secondary" style={{ fontSize: 12 }}>Refresh</button>
+<div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={loadArchived} className="btn-secondary" style={{ fontSize: 12 }}>Refresh</button>
+              {archived.length > 0 && (
+                <button onClick={handleSelectAllArchived} className="btn-secondary" style={{ fontSize: 12 }}>
+                  Select All ({archived.length})
+                </button>
+              )}
+              {selectedArchived.length > 0 && isMasterAdmin && (
+                <button onClick={handleBulkHardDelete}
+                  style={{ fontSize: 12, padding: '6px 12px', background: 'var(--color-danger)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Trash2 size={13} /> Delete All ({selectedArchived.length}) Forever
+                </button>
+              )}
+            </div>
           </div>
           {archivedLoading ? (
             <div className="flex justify-center py-12"><div className="spinner" /></div>
@@ -178,7 +208,8 @@ export default function QuestionBankPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {archived.map(q => (
-                <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--color-surface2)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
+                <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: selectedArchived.includes(q.id) ? 'var(--color-danger)10' : 'var(--color-surface2)', borderRadius: 8, border: '1px solid ' + (selectedArchived.includes(q.id) ? 'var(--color-danger)' : 'var(--color-border)') }}>
+                  <input type="checkbox" checked={selectedArchived.includes(q.id)} onChange={() => setSelectedArchived(prev => prev.includes(q.id) ? prev.filter(s => s !== q.id) : [...prev, q.id])} style={{ marginTop: 4, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 13, color: 'var(--color-text)', margin: 0 }}>{q.question_text}</p>
                     <div style={{ display: 'flex', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
