@@ -37,7 +37,14 @@ export default function StudentExamPage() {
     const data = JSON.parse(raw)
     setSessionData(data)
     sessionToken.current = data.session.session_token
-    setTimeLeft(data.exam.duration_minutes * 60)
+    // If end_time exists, use min(duration, time_until_end)
+    const fullDuration = data.exam.duration_minutes * 60
+    if (data.exam.end_time) {
+      const secondsUntilEnd = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
+      setTimeLeft(Math.min(fullDuration, Math.max(0, secondsUntilEnd)))
+    } else {
+      setTimeLeft(fullDuration)
+    }
     setMobile(isMobile())
 
     if (data.answers?.length) {
