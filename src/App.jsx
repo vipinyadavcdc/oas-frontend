@@ -15,6 +15,7 @@ import TrainersPage from './pages/TrainersPage'
 import AuditPage from './pages/AuditPage'
 import SettingsPage from './pages/SettingsPage'
 import StudentHistoryPage from './pages/StudentHistoryPage'
+import QuestionAnalyticsPage from './pages/QuestionAnalyticsPage'
 
 import StudentEntryPage from './pages/student/StudentEntryPage'
 import StudentExamPage from './pages/student/StudentExamPage'
@@ -46,6 +47,7 @@ function AppRoutes() {
         <Route path="exams/:id/results" element={<ResultsPage />} />
         <Route path="exams/:id/monitor" element={<MonitorPage />} />
         <Route path="questions" element={<QuestionBankPage />} />
+        <Route path="questions/analytics" element={<QuestionAnalyticsPage />} />
         <Route path="students" element={<StudentHistoryPage />} />
         <Route path="students/:rollNumber" element={<StudentHistoryPage />} />
         <Route path="trainers" element={<ProtectedRoute superAdminOnly><TrainersPage /></ProtectedRoute>} />
