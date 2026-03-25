@@ -208,8 +208,8 @@ export default function CreateExamPage() {
         aptitude_count: aptSelected,
         verbal_count: verSelected,
         total_questions: aptSelected + verSelected,
-        start_time: form.start_time || null,
-        end_time: form.end_time || null
+        start_time: form.start_time ? new Date(form.start_time).toISOString() : null,
+        end_time: form.end_time ? new Date(form.end_time).toISOString() : null
       }
 
       let examId = id
