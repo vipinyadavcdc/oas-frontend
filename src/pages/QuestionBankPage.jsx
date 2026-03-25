@@ -1,10 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { Plus, Upload, Download, Search, BookOpen, Archive, Trash2 } from 'lucide-react'
+import { Plus, Upload, Download, Search, BookOpen, Archive, Trash2, BarChart2 } from 'lucide-react'
 import api from '../utils/api'
 import toast from 'react-hot-toast'
 
 export default function QuestionBankPage() {
+  const navigate = useNavigate()
+  const navigate = useNavigate()
   const [questions, setQuestions] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -108,11 +112,14 @@ export default function QuestionBankPage() {
           <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>{total} questions total</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => navigate('/questions/analytics')} className="btn-secondary"><BarChart2 size={16} /> Analytics</button>
+          <button onClick={() => navigate('/questions/analytics')} className="btn-secondary"><BarChart2 size={16} /> Analytics</button>
           <button onClick={downloadTemplate} className="btn-secondary"><Download size={16} /> Template</button>
           <button onClick={() => setShowAdd(!showAdd)} className="btn-primary"><Plus size={16} /> Add Question</button>
         </div>
       </div>
 
+      {/* Upload */}
       <div className="card mb-5">
         <h3 className="font-semibold text-sm mb-3" style={{ color: 'var(--color-text)' }}>Bulk Upload (Excel)</h3>
         <div {...getRootProps()} className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all"
@@ -154,6 +161,7 @@ export default function QuestionBankPage() {
         )}
       </div>
 
+      {/* Add Question Form */}
       {showAdd && (
         <div className="card mb-5">
           <h3 className="font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Add New Question</h3>
@@ -225,6 +233,7 @@ export default function QuestionBankPage() {
         </div>
       )}
 
+      {/* Filters */}
       <div className="card mb-5">
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="relative">
@@ -255,6 +264,7 @@ export default function QuestionBankPage() {
         </div>
       </div>
 
+      {/* Questions Table */}
       <div className="card">
         {loading ? (
           <div className="flex justify-center py-12"><div className="spinner" /></div>
