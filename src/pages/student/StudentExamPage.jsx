@@ -224,8 +224,46 @@ export default function StudentExamPage() {
   const showWarn = (msg) => { setWarningMsg(msg); setTimeout(() => setWarningMsg(''), 6000) }
 
   const startAntiCheat = (data) => {
-    // Fullscreen
-    try { document.documentElement.requestFullscreen?.() } catch {}
+    // Fullscreen (desktop only)
+    if (!isMobile()) {
+      try { document.documentElement.requestFullscreen?.() } catch {}
+    }
+
+    // Prevent text selection globally
+    document.body.style.userSelect = 'none'
+    document.body.style.webkitUserSelect = 'none'
+    document.body.style.mozUserSelect = 'none'
+
+    // Block long press context menu on mobile (kills Android AI popup)
+    const blockLongPress = (e) => { e.preventDefault(); return false }
+    document.addEventListener('contextmenu', blockLongPress)
+    document.addEventListener('selectstart', blockLongPress)
+
+    // Block touch selection on Android
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 1) e.preventDefault() // block multi-touch
+    }, { passive: false })
+
+    // Screen capture detection (works on some browsers)
+    try {
+      const mediaQuery = window.matchMedia('(display-mode: fullscreen)')
+      // Detect if screen is being captured via visibility API
+    } catch {}
+
+    // On mobile — any app switch = immediate warning (stricter)
+    if (isMobile()) {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          violationCount.current++
+          setWarningMsg('⚠️ App switch detected! (' + violationCount.current + '/3) Do not leave the exam!')
+          api.post('/exam/violation', { session_token: sessionToken.current, violation_type: 'tab_switch', details: { mobile: true } }).catch(()=>{})
+          if (violationCount.current >= 3) {
+            showWarn('Too many violations! Auto-submitting...')
+            setTimeout(() => handleAutoSubmit('violation_limit'), 2000)
+          }
+        }
+      })
+    }
 
     const blockKeys = (e) => {
       if (e.ctrlKey && ['c','v','x','a','p'].includes(e.key.toLowerCase())) e.preventDefault()
@@ -412,8 +450,22 @@ export default function StudentExamPage() {
     return { background: 'var(--color-surface2)', color: 'var(--color-text-muted)' }
   }
 
+  // Inject anti-copy CSS
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.id = 'anti-copy-style'
+    style.innerHTML = `
+      * { -webkit-user-select: none !important; -moz-user-select: none !important; user-select: none !important; }
+      input, textarea, select { -webkit-user-select: text !important; user-select: text !important; }
+      ::selection { background: transparent !important; }
+      ::-moz-selection { background: transparent !important; }
+    `
+    document.head.appendChild(style)
+    return () => { const s = document.getElementById('anti-copy-style'); if(s) s.remove() }
+  }, [])
+
   return (
-    <div style={{ minHeight:'100vh', background:'var(--color-bg)', fontFamily:'inherit' }}>
+    <div style={{ minHeight:'100vh', background:'var(--color-bg)', fontFamily:'inherit', userSelect:'none', WebkitUserSelect:'none', MozUserSelect:'none', msUserSelect:'none' }}>
       {/* Warning banner */}
       {warningMsg && (
         <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:1000, background:'var(--color-danger)', color:'white', padding:'10px 16px', textAlign:'center', fontWeight:600, fontSize:14 }}>
@@ -451,7 +503,7 @@ export default function StudentExamPage() {
                 </button>
               </div>
 
-              <p style={{ fontSize:16, color:'var(--color-text)', lineHeight:1.6, marginBottom:20 }}>{currentQ.question_text}</p>
+              <p style={{ fontSize:16, color:'var(--color-text)', lineHeight:1.6, marginBottom:20, userSelect:'none', WebkitUserSelect:'none' }}>{currentQ.question_text}</p>
 
               <div style={{ display:'grid', gap:10 }}>
                 {['A','B','C','D'].map(opt => {
