@@ -58,6 +58,23 @@ export default function QuestionBankPage() {
     if (t === 'archived') loadArchived()
   }
 
+  const handleRestore = async (id) => {
+    try {
+      await api.patch('/questions/' + id, { is_archived: false, is_active: true })
+      toast.success('Question restored!')
+      setArchived(prev => prev.filter(q => q.id !== id))
+    } catch { toast.error('Failed to restore') }
+  }
+
+  const handleHardDelete = async (id) => {
+    if (!confirm('PERMANENTLY delete this question? This cannot be undone!')) return
+    try {
+      await api.delete('/questions/' + id)
+      toast.success('Question permanently deleted')
+      setArchived(prev => prev.filter(q => q.id !== id))
+    } catch (err) { toast.error(err.response?.data?.error || 'Failed to delete') }
+  }
+
   const handleAddQuestion = async (e) => {
     e.preventDefault()
     try {
@@ -73,25 +90,8 @@ export default function QuestionBankPage() {
 
   const handleDelete = async (id) => {
     if (!confirm('Archive this question?')) return
-    try { await api.patch(`/questions/${id}`, { is_archived: true }); toast.success('Archived'); loadQuestions() }
+    try { await api.patch('/questions/' + id, { is_archived: true }); toast.success('Archived'); loadQuestions() }
     catch { toast.error('Failed to archive') }
-  }
-
-  const handleRestore = async (id) => {
-    try {
-      await api.patch(`/questions/${id}`, { is_archived: false, is_active: true })
-      toast.success('Question restored!')
-      setArchived(prev => prev.filter(q => q.id !== id))
-    } catch { toast.error('Failed to restore') }
-  }
-
-  const handleHardDelete = async (id) => {
-    if (!confirm('PERMANENTLY delete this question? This cannot be undone!')) return
-    try {
-      await api.delete(`/questions/${id}`)
-      toast.success('Permanently deleted')
-      setArchived(prev => prev.filter(q => q.id !== id))
-    } catch { toast.error('Failed to delete') }
   }
 
   const onDrop = useCallback(async (files) => {
@@ -104,8 +104,8 @@ export default function QuestionBankPage() {
     try {
       const res = await api.post('/questions/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       setUploadResult(res.data)
-      if (res.data.inserted > 0) { toast.success(`${res.data.inserted} questions uploaded!`); loadQuestions() }
-      if (res.data.errors > 0) toast.error(`${res.data.errors} rows had errors`)
+      if (res.data.inserted > 0) { toast.success(res.data.inserted + ' questions uploaded!'); loadQuestions() }
+      if (res.data.errors > 0) toast.error(res.data.errors + ' rows had errors')
     } catch (err) {
       toast.error(err.response?.data?.error || 'Upload failed')
     } finally { setUploading(false) }
@@ -157,7 +157,7 @@ export default function QuestionBankPage() {
         <button onClick={() => handleTabChange('archived')}
           className={tab === 'archived' ? 'btn-primary' : 'btn-secondary'}
           style={{ fontSize: 13 }}>
-          Archived {archived.length > 0 && `(${archived.length})`}
+          Archived {archived.length > 0 && '(' + archived.length + ')'}
         </button>
       </div>
 
@@ -189,12 +189,12 @@ export default function QuestionBankPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <button onClick={() => handleRestore(q.id)} title="Restore"
+                    <button onClick={() => handleRestore(q.id)}
                       style={{ background: 'var(--color-success)', color: 'white', border: 'none', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
                       <RotateCcw size={13} /> Restore
                     </button>
                     {isMasterAdmin && (
-                      <button onClick={() => handleHardDelete(q.id)} title="Permanently Delete"
+                      <button onClick={() => handleHardDelete(q.id)}
                         style={{ background: 'var(--color-danger)', color: 'white', border: 'none', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
                         <Trash2 size={13} /> Delete Forever
                       </button>
@@ -209,7 +209,7 @@ export default function QuestionBankPage() {
 
       {/* ACTIVE TAB */}
       {tab === 'active' && (
-        <>
+        <div>
           {/* Upload */}
           <div className="card mb-5">
             <h3 className="font-semibold text-sm mb-3" style={{ color: 'var(--color-text)' }}>Bulk Upload (Excel)</h3>
@@ -311,8 +311,8 @@ export default function QuestionBankPage() {
                         Option {opt}
                         {newQ.correct_option === opt && <span className="text-green-600 text-xs font-bold">Correct</span>}
                       </label>
-                      <input className="input" placeholder={`Option ${opt}`} value={newQ[`option_${opt.toLowerCase()}`]}
-                        onChange={e => setNewQ({ ...newQ, [`option_${opt.toLowerCase()}`]: e.target.value })} required />
+                      <input className="input" placeholder={'Option ' + opt} value={newQ['option_' + opt.toLowerCase()]}
+                        onChange={e => setNewQ({ ...newQ, ['option_' + opt.toLowerCase()]: e.target.value })} required />
                     </div>
                   ))}
                 </div>
@@ -429,7 +429,7 @@ export default function QuestionBankPage() {
               </>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   )
