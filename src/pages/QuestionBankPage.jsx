@@ -1,13 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import { Plus, Upload, Download, Search, BookOpen, Archive, Trash2, BarChart2 } from 'lucide-react'
 import api from '../utils/api'
 import toast from 'react-hot-toast'
 
 export default function QuestionBankPage() {
-  const navigate = useNavigate()
   const navigate = useNavigate()
   const [questions, setQuestions] = useState([])
   const [total, setTotal] = useState(0)
