@@ -324,12 +324,6 @@ export default function StudentExamPage() {
   const aptTimeMin = exam?.aptitude_time_minutes || 0
   const verTimeMin = exam?.verbal_time_minutes || 0
   const hasBothSections = aptTimeMin > 0 && verTimeMin > 0
-
-  // DEBUG — remove after testing
-  if (window.__debug_shown !== true) {
-    window.__debug_shown = true
-    alert('DEBUG: aptTime=' + aptTimeMin + ' verTime=' + verTimeMin + ' hasBoth=' + hasBothSections + ' activeSection=' + activeSection)
-  }
   const allQ = sessionData.questions || []
 
   // ── SECTION SELECTION SCREEN ──────────────────────────────
@@ -337,7 +331,6 @@ export default function StudentExamPage() {
   if (!hasBothSections) {
     return (
       <div style={{ padding: 20, background: 'red', color: 'white', fontSize: 20 }}>
-        DEBUG: aptTime={aptTimeMin} verTime={verTimeMin} hasBoth={String(hasBothSections)} section={String(activeSection)}
         <br/>Questions: {allQ.length}
       </div>
     )
