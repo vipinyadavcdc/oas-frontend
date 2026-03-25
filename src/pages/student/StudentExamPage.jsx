@@ -80,6 +80,30 @@ export default function StudentExamPage() {
     }
   }, [])
 
+  // Inject anti-copy CSS — must be at top level, not after conditional returns
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.id = 'anti-copy-style'
+    style.innerHTML = `
+      * {
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+        user-select: none !important;
+        -webkit-touch-callout: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      input, textarea, select {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
+      ::selection { background: transparent !important; color: inherit !important; }
+      ::-moz-selection { background: transparent !important; color: inherit !important; }
+    `
+    document.head.appendChild(style)
+    return () => { const s = document.getElementById('anti-copy-style'); if(s) s.remove() }
+  }, [])
+
   // Timer
   useEffect(() => {
     if (!sessionData) return
@@ -506,30 +530,6 @@ export default function StudentExamPage() {
     if (s === 'current') return { background: 'var(--color-primary)', color: 'white' }
     return { background: 'var(--color-surface2)', color: 'var(--color-text-muted)' }
   }
-
-  // Inject anti-copy CSS
-  useEffect(() => {
-    const style = document.createElement('style')
-    style.id = 'anti-copy-style'
-    style.innerHTML = `
-      * {
-        -webkit-user-select: none !important;
-        -moz-user-select: none !important;
-        -ms-user-select: none !important;
-        user-select: none !important;
-        -webkit-touch-callout: none !important;
-        -webkit-tap-highlight-color: transparent !important;
-      }
-      input, textarea, select {
-        -webkit-user-select: text !important;
-        user-select: text !important;
-      }
-      ::selection { background: transparent !important; color: inherit !important; }
-      ::-moz-selection { background: transparent !important; color: inherit !important; }
-    `
-    document.head.appendChild(style)
-    return () => { const s = document.getElementById('anti-copy-style'); if(s) s.remove() }
-  }, [])
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--color-bg)', fontFamily:'inherit', userSelect:'none', WebkitUserSelect:'none', MozUserSelect:'none', msUserSelect:'none' }}>
