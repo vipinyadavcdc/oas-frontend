@@ -1,3 +1,4 @@
+// v2.0 - section selection fix - 2026-03-25T10:59:32.574305
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Send, AlertTriangle, Bookmark, BookmarkCheck, Check } from 'lucide-react'
