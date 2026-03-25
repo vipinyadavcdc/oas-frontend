@@ -225,9 +225,13 @@ export default function StudentExamPage() {
   const showWarn = (msg) => { setWarningMsg(msg); setTimeout(() => setWarningMsg(''), 6000) }
 
   const startAntiCheat = (data) => {
-    // Fullscreen (desktop only)
+    // Fullscreen — desktop only, never on mobile (causes white screen)
     if (!isMobile()) {
-      try { document.documentElement.requestFullscreen?.() } catch {}
+      try {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {})
+        }
+      } catch {}
     }
 
     // Prevent text selection globally
@@ -346,9 +350,11 @@ export default function StudentExamPage() {
     }
 
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
+      if (!document.fullscreenElement && !isMobile()) {
         showWarn('⚠️ Please stay in fullscreen mode!')
-        setTimeout(() => { try { document.documentElement.requestFullscreen?.() } catch {} }, 1000)
+        setTimeout(() => {
+          try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{}) } catch {}
+        }, 1000)
       }
     }
 
