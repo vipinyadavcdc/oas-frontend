@@ -76,6 +76,7 @@ export default function StudentExamPage() {
       clearInterval(autoSaveTimer.current)
       clearInterval(heartbeatTimer.current)
       clearTimeout(visGraceTimer.current)
+      if (window._clearSelInterval) clearInterval(window._clearSelInterval)
     }
   }, [])
 
@@ -239,10 +240,30 @@ export default function StudentExamPage() {
     document.addEventListener('contextmenu', blockLongPress)
     document.addEventListener('selectstart', blockLongPress)
 
-    // Block touch selection on Android
+    // Block ALL touch-based text selection on Android
+    // This prevents Circle to Search / Google AI from appearing
     document.addEventListener('touchstart', (e) => {
-      if (e.touches.length > 1) e.preventDefault() // block multi-touch
+      if (e.touches.length > 1) e.preventDefault()
     }, { passive: false })
+
+    document.addEventListener('touchend', (e) => {
+      // Clear any selection that might have happened
+      if (window.getSelection) window.getSelection().removeAllRanges()
+    }, { passive: false })
+
+    document.addEventListener('touchmove', (e) => {
+      // Clear selection during scroll/move
+      if (window.getSelection) window.getSelection().removeAllRanges()
+    }, { passive: true })
+
+    // Interval to continuously clear any text selection
+    const clearSelInterval = setInterval(() => {
+      if (window.getSelection) window.getSelection().removeAllRanges()
+      if (document.selection) document.selection.empty()
+    }, 500)
+
+    // Store for cleanup
+    window._clearSelInterval = clearSelInterval
 
     // Screen capture detection (works on some browsers)
     try {
@@ -264,6 +285,36 @@ export default function StudentExamPage() {
         }
       })
     }
+
+    // Split screen / window resize detection
+    // Works for BOTH desktop and mobile (catches Circle to Search resize)
+    const originalHeight = window.innerHeight
+    const originalWidth = window.innerWidth
+
+    const handleResize = () => {
+      const heightRatio = window.innerHeight / originalHeight
+      const widthRatio = window.innerWidth / originalWidth
+
+      // If window shrinks by more than 20% in either dimension = split screen
+      if (heightRatio < 0.75 || widthRatio < 0.75) {
+        violationCount.current++
+        const msg = isMobile()
+          ? '⚠️ Split screen / AI assistant detected! (' + violationCount.current + '/3)'
+          : '⚠️ Split screen detected! (' + violationCount.current + '/3)'
+        setWarningMsg(msg)
+        api.post('/exam/violation', {
+          session_token: sessionToken.current,
+          violation_type: 'split_screen',
+          details: { heightRatio: heightRatio.toFixed(2), widthRatio: widthRatio.toFixed(2), mobile: isMobile() }
+        }).catch(()=>{})
+        if (violationCount.current >= 3) {
+          showWarn('Too many violations! Auto-submitting...')
+          setTimeout(() => handleAutoSubmit('violation_limit'), 2000)
+        }
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
 
     const blockKeys = (e) => {
       if (e.ctrlKey && ['c','v','x','a','p'].includes(e.key.toLowerCase())) e.preventDefault()
@@ -455,10 +506,20 @@ export default function StudentExamPage() {
     const style = document.createElement('style')
     style.id = 'anti-copy-style'
     style.innerHTML = `
-      * { -webkit-user-select: none !important; -moz-user-select: none !important; user-select: none !important; }
-      input, textarea, select { -webkit-user-select: text !important; user-select: text !important; }
-      ::selection { background: transparent !important; }
-      ::-moz-selection { background: transparent !important; }
+      * {
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+        user-select: none !important;
+        -webkit-touch-callout: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      input, textarea, select {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
+      ::selection { background: transparent !important; color: inherit !important; }
+      ::-moz-selection { background: transparent !important; color: inherit !important; }
     `
     document.head.appendChild(style)
     return () => { const s = document.getElementById('anti-copy-style'); if(s) s.remove() }
