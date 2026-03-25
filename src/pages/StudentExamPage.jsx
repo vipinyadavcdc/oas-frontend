@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Send, AlertTriangle, Bookmark, BookmarkCheck } from 'lucide-react'
+import { Send, AlertTriangle, Bookmark, BookmarkCheck, Check } from 'lucide-react'
 import api from '../../utils/api'
 import toast from 'react-hot-toast'
 
 const isMobile = () => window.innerWidth < 768
-const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent)
 
 export default function StudentExamPage() {
   const navigate = useNavigate()
@@ -14,10 +13,9 @@ export default function StudentExamPage() {
   const [answers, setAnswers] = useState({})
   const [bookmarks, setBookmarks] = useState({})
   const [timeLeft, setTimeLeft] = useState(0)
-  const [activeSection, setActiveSection] = useState(null) // null = section selection screen
+  const [activeSection, setActiveSection] = useState(null)
+  const [sectionDone, setSectionDone] = useState({ aptitude_reasoning: false, verbal: false })
   const [sectionSubmitting, setSectionSubmitting] = useState(false)
-  const hasSections = (data) => data?.exam?.aptitude_time_minutes > 0 && data?.exam?.verbal_time_minutes > 0
-  const [violations, setViolations] = useState(0)
   const [warningMsg, setWarningMsg] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
@@ -30,9 +28,8 @@ export default function StudentExamPage() {
   const violationCount = useRef(0)
   const extraMinutes = useRef(0)
   const qStartTime = useRef(Date.now())
-  const originalWidth = useRef(window.screen.width)
-  // Grace timer for mobile visibility change
   const visGraceTimer = useRef(null)
+  const activeSectionRef = useRef(null)
 
   useEffect(() => {
     const raw = sessionStorage.getItem('cdc_session')
@@ -40,8 +37,23 @@ export default function StudentExamPage() {
     const data = JSON.parse(raw)
     setSessionData(data)
     sessionToken.current = data.session.session_token
-    setTimeLeft(data.exam.duration_minutes * 60)
     setMobile(isMobile())
+
+    const aptTime = (data.exam.aptitude_time_minutes || 0) * 60
+    const verTime = (data.exam.verbal_time_minutes || 0) * 60
+    const hasSec = aptTime > 0 && verTime > 0
+
+    if (!hasSec) {
+      // No sections — start full timer
+      const fullDuration = data.exam.duration_minutes * 60
+      if (data.exam.end_time) {
+        const secondsUntilEnd = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
+        setTimeLeft(Math.min(fullDuration, Math.max(0, secondsUntilEnd)))
+      } else {
+        setTimeLeft(fullDuration)
+      }
+    }
+    // If sections exist, timer starts when student picks a section
 
     if (data.answers?.length) {
       const restored = {}
@@ -49,7 +61,7 @@ export default function StudentExamPage() {
       setAnswers(restored)
     }
 
-    startAntiCheat()
+    startAntiCheat(data)
     startHeartbeat()
     startAutoSave()
 
@@ -58,280 +70,196 @@ export default function StudentExamPage() {
       clearInterval(autoSaveTimer.current)
       clearInterval(heartbeatTimer.current)
       clearTimeout(visGraceTimer.current)
-      document.removeEventListener('keydown', blockKeys)
-      document.removeEventListener('contextmenu', blockRight)
-      document.removeEventListener('copy', blockCopy)
-      document.removeEventListener('paste', blockCopy)
-      document.removeEventListener('cut', blockCopy)
-      document.removeEventListener('visibilitychange', handleVisibility)
-      window.removeEventListener('blur', handleBlur)
-      window.removeEventListener('resize', handleResize)
-      document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
   }, [])
 
+  // Timer
   useEffect(() => {
     if (!sessionData) return
+    clearInterval(timerRef.current)
+    if (timeLeft <= 0) return
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
         const newTime = prev - 1 + extraMinutes.current * 60
         extraMinutes.current = 0
         if (newTime <= 0) {
-          // If sections exist and there's another section to go to
-          if (hasBothSections && activeSection) {
-            const nextSec = activeSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
-            const nextTime = nextSec === 'aptitude_reasoning' ? aptTimeMin * 60 : verTimeMin * 60
-            api.post('/exam/submit-section', { session_token: sessionToken.current, section: activeSection }).catch(()=>{})
-            api.post('/exam/start-section', { session_token: sessionToken.current, section: nextSec }).catch(()=>{})
-            setActiveSection(nextSec)
-            setCurrentIdx(0)
-            toast.error('Time up! Moving to ' + (nextSec === 'verbal' ? 'Verbal' : 'Aptitude') + ' section')
-            return nextTime
-          }
-          handleAutoSubmit('timer_expired'); return 0
+          handleTimerEnd()
+          return 0
         }
         return newTime
       })
     }, 1000)
     return () => clearInterval(timerRef.current)
-  }, [sessionData])
+  }, [sessionData, activeSection])
 
-  // Reset question start time when question changes
-  useEffect(() => { qStartTime.current = Date.now() }, [currentIdx])
+  const handleTimerEnd = async () => {
+    const data = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+    const aptTime = (data.exam?.aptitude_time_minutes || 0) * 60
+    const verTime = (data.exam?.verbal_time_minutes || 0) * 60
+    const hasSec = aptTime > 0 && verTime > 0
+    const curSection = activeSectionRef.current
 
-  const startAntiCheat = () => {
-    // Fullscreen — skip on iOS (not supported)
-    if (!isIOS()) requestFullscreen()
+    if (hasSec && curSection) {
+      const nextSection = curSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
+      const nextTime = nextSection === 'aptitude_reasoning' ? aptTime : verTime
 
-    document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('blur', handleBlur)
-    document.addEventListener('contextmenu', blockRight)
-    document.addEventListener('copy', blockCopy)
-    document.addEventListener('paste', blockCopy)
-    document.addEventListener('cut', blockCopy)
-    document.addEventListener('keydown', blockKeys)
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    // user-select none on body
-    document.body.style.userSelect = 'none'
-    document.body.style.webkitUserSelect = 'none'
+      // Check if other section already done
+      if (sectionDone[nextSection]) {
+        toast.error('Time up! All sections complete.')
+        handleAutoSubmit('timer_expired')
+        return
+      }
 
-    // Split-screen detection
-    window.addEventListener('resize', handleResize)
+      try {
+        await api.post('/exam/submit-section', { session_token: sessionToken.current, section: curSection })
+        await api.post('/exam/start-section', { session_token: sessionToken.current, section: nextSection })
+      } catch {}
 
-    // DevTools detection (desktop only)
-    if (!isMobile()) {
-      setInterval(() => {
-        if (window.outerWidth - window.innerWidth > 160 || window.outerHeight - window.innerHeight > 160) {
-          logViolation('devtools_open', {})
-        }
-      }, 3000)
+      setSectionDone(prev => ({ ...prev, [curSection]: true }))
+      setActiveSection(nextSection)
+      activeSectionRef.current = nextSection
+      setCurrentIdx(0)
+      setTimeLeft(nextTime)
+      toast.error('⏰ Time up! Moving to ' + (nextSection === 'verbal' ? 'Verbal' : 'Aptitude') + ' section')
+      return
     }
-
-    // Idle detection (3 min)
-    let idleTimer
-    const resetIdle = () => {
-      clearTimeout(idleTimer)
-      idleTimer = setTimeout(() => {
-        showWarn('You have been idle for 3 minutes. Stay active!')
-        logViolation('idle_timeout', {})
-      }, 3 * 60 * 1000)
-    }
-    document.addEventListener('mousemove', resetIdle)
-    document.addEventListener('keypress', resetIdle)
-    document.addEventListener('touchstart', resetIdle)
-    resetIdle()
+    handleAutoSubmit('timer_expired')
   }
-
-  const requestFullscreen = () => {
-    const el = document.documentElement
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => {})
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
-    else if (el.mozRequestFullScreen) el.mozRequestFullScreen()
-  }
-
-  const handleVisibility = () => {
-    if (!document.hidden) return
-    // Mobile: 4-second grace window before counting violation
-    const delay = isMobile() ? 4000 : 0
-    visGraceTimer.current = setTimeout(() => {
-      if (document.hidden) addViolation('tab_switch', { msg: 'Left the exam screen' })
-    }, delay)
-  }
-
-  const handleBlur = () => {
-    if (isMobile()) return // too many false positives on mobile
-    addViolation('window_blur', { msg: 'Window lost focus' })
-  }
-
-  const handleResize = () => {
-    const ratio = window.innerWidth / originalWidth.current
-    if (ratio < 0.75) {
-      addViolation('split_screen', { ratio: ratio.toFixed(2), innerWidth: window.innerWidth })
-      showWarn('Split screen detected! Please exit split mode to continue.')
-    }
-  }
-
-  const handleFullscreenChange = () => {
-    if (!document.fullscreenElement && !isIOS()) {
-      addViolation('fullscreen_exit', {})
-      setTimeout(requestFullscreen, 500)
-    }
-  }
-
-  const blockRight = (e) => e.preventDefault()
-  const blockCopy  = (e) => { e.preventDefault(); logViolation('copy_attempt', { type: e.type }) }
-  const blockKeys  = (e) => {
-    const blocked = [
-      e.key === 'F12',
-      e.ctrlKey && ['u','U','c','C','a','A','s','S','p','P','i','I'].includes(e.key),
-      e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key),
-      e.key === 'PrintScreen',
-    ]
-    if (blocked.some(Boolean)) { e.preventDefault(); logViolation('keyboard_shortcut', { key: e.key }) }
-  }
-
-  const addViolation = async (type, details) => {
-    violationCount.current += 1
-    setViolations(violationCount.current)
-    await logViolation(type, details)
-    const limit = type === 'split_screen' ? 2 : 3
-    const remaining = limit - violationCount.current
-    if (violationCount.current >= limit) {
-      showWarn('3 violations recorded. Auto-submitting!')
-      setTimeout(() => handleAutoSubmit('violation_limit'), 2000)
-    } else {
-      showWarn(`Warning ${violationCount.current}/${limit}: ${getViolationMsg(type)}. ${remaining} left!`)
-    }
-  }
-
-  const logViolation = async (type, details) => {
-    try { await api.post('/exam/violation', { session_token: sessionToken.current, violation_type: type, details }) } catch {}
-  }
-
-  const getViolationMsg = (type) => ({
-    tab_switch: 'App switch detected', window_blur: 'Window lost focus',
-    fullscreen_exit: 'Fullscreen exited', split_screen: 'Split screen detected'
-  }[type] || 'Violation detected')
-
-  const showWarn = (msg) => { setWarningMsg(msg); setTimeout(() => setWarningMsg(''), 6000) }
 
   const handleSectionSelect = async (section) => {
-    const data = sessionData
-    const aptTime = (data.exam.aptitude_time_minutes || 0) * 60
-    const verTime = (data.exam.verbal_time_minutes || 0) * 60
+    const data = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+    const aptTime = (data.exam?.aptitude_time_minutes || 0) * 60
+    const verTime = (data.exam?.verbal_time_minutes || 0) * 60
     const sectionTime = section === 'aptitude_reasoning' ? aptTime : verTime
+
     setActiveSection(section)
+    activeSectionRef.current = section
+    setCurrentIdx(0)
     setTimeLeft(sectionTime)
-    // Record section start
+
     try { await api.post('/exam/start-section', { session_token: sessionToken.current, section }) } catch {}
   }
 
   const handleSectionSubmit = async () => {
     if (sectionSubmitting) return
-    if (!confirm('Submit this section? You CANNOT go back to it!')) return
+    if (!confirm('Submit this section? You CANNOT go back!')) return
     setSectionSubmitting(true)
     try {
       await saveAllAnswers()
-      const data = sessionData
-      const aptTime = (data.exam.aptitude_time_minutes || 0) * 60
-      const verTime = (data.exam.verbal_time_minutes || 0) * 60
-      const currentSection = activeSection
-      const nextSection = currentSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
+      const data = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+      const aptTime = (data.exam?.aptitude_time_minutes || 0) * 60
+      const verTime = (data.exam?.verbal_time_minutes || 0) * 60
+      const curSection = activeSection
+      const nextSection = curSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
       const nextTime = nextSection === 'aptitude_reasoning' ? aptTime : verTime
 
-      await api.post('/exam/submit-section', { session_token: sessionToken.current, section: currentSection })
+      await api.post('/exam/submit-section', { session_token: sessionToken.current, section: curSection })
+      setSectionDone(prev => ({ ...prev, [curSection]: true }))
 
-      // Switch to next section — time is NOT carried over (lost time rule)
+      // Check if other section already done — if so, submit full exam
+      if (sectionDone[nextSection]) {
+        await handleAutoSubmit('all_sections_done')
+        return
+      }
+
+      await api.post('/exam/start-section', { session_token: sessionToken.current, section: nextSection })
       setActiveSection(nextSection)
+      activeSectionRef.current = nextSection
+      setCurrentIdx(0)
       setTimeLeft(nextTime)
-      // Record next section start
-      try { await api.post('/exam/start-section', { session_token: sessionToken.current, section: nextSection }) } catch {}
-      toast.success('Section submitted! Now attempting ' + (nextSection === 'aptitude_reasoning' ? 'Aptitude & Reasoning' : 'Verbal'))
-    } catch (err) {
-      toast.error('Failed to submit section')
-    } finally { setSectionSubmitting(false) }
+      toast.success('Section submitted! Now: ' + (nextSection === 'verbal' ? 'Verbal' : 'Aptitude & Reasoning'))
+    } catch { toast.error('Failed to submit section') }
+    finally { setSectionSubmitting(false) }
+  }
+
+  const saveAllAnswers = async () => {
+    for (const [qId, option] of Object.entries(answers)) {
+      try {
+        await api.post('/exam/save-answer', {
+          session_token: sessionToken.current, question_id: qId,
+          selected_option: option, time_spent_seconds: 0
+        })
+      } catch {}
+    }
   }
 
   const startHeartbeat = () => {
     heartbeatTimer.current = setInterval(async () => {
-      try {
-        await api.post('/exam/heartbeat', { session_token: sessionToken.current })
-        const raw = sessionStorage.getItem('cdc_session')
-        if (raw) {
-          const data = JSON.parse(raw)
-          const res = await api.get('/monitor/' + data.exam.id + '/check-extension/' + sessionToken.current)
-          if (res.data.blocked) { toast.error('Your access has been blocked by the trainer.'); handleAutoSubmit('blocked') }
-          if (res.data.extra_minutes > 0) { extraMinutes.current = res.data.extra_minutes; toast.success('+' + res.data.extra_minutes + ' minutes added!') }
-        }
-      } catch {}
+      try { await api.post('/exam/heartbeat', { session_token: sessionToken.current }) } catch {}
     }, 30000)
   }
 
   const startAutoSave = () => {
-    autoSaveTimer.current = setInterval(() => saveAllAnswers(), 30000)
-  }
-
-  const getTimeSpent = () => Math.round((Date.now() - qStartTime.current) / 1000)
-
-  const saveAllAnswers = async () => {
-    for (const [question_id, selected_option] of Object.entries(answers)) {
-      try {
-        await api.post('/exam/save-answer', { session_token: sessionToken.current, question_id, selected_option, is_bookmarked: bookmarks[question_id] || false, time_spent_seconds: 0 })
-      } catch {}
-    }
-  }
-
-  const selectAnswer = async (questionId, option) => {
-    const timeSpent = getTimeSpent()
-    setAnswers(a => ({ ...a, [questionId]: option }))
-    try {
-      await api.post('/exam/save-answer', { session_token: sessionToken.current, question_id: questionId, selected_option: option, is_bookmarked: bookmarks[questionId] || false, time_spent_seconds: timeSpent })
-    } catch {}
-  }
-
-  const goNext = async () => {
-    if (sessionData && currentIdx < sessionData.questions.length - 1) {
-      const timeSpent = getTimeSpent()
-      const currentQ = sessionData.questions[currentIdx]
-      if (answers[currentQ.id]) {
+    autoSaveTimer.current = setInterval(async () => {
+      for (const [qId, option] of Object.entries(answers)) {
         try {
-          await api.post('/exam/save-answer', { session_token: sessionToken.current, question_id: currentQ.id, selected_option: answers[currentQ.id], is_bookmarked: bookmarks[currentQ.id] || false, time_spent_seconds: timeSpent })
+          await api.post('/exam/save-answer', {
+            session_token: sessionToken.current, question_id: qId,
+            selected_option: option, time_spent_seconds: 0
+          })
         } catch {}
       }
-      setCurrentIdx(i => i + 1)
-    }
+    }, 30000)
   }
 
-  const toggleBookmark = (questionId) => setBookmarks(b => ({ ...b, [questionId]: !b[questionId] }))
+  const showWarn = (msg) => { setWarningMsg(msg); setTimeout(() => setWarningMsg(''), 6000) }
 
-  const handleSubmit = async () => {
-    setSubmitting(true)
-    await saveAllAnswers()
-    try {
-      const res = await api.post('/exam/submit', { session_token: sessionToken.current })
-      const raw = sessionStorage.getItem('cdc_session')
-      const data = raw ? JSON.parse(raw) : {}
-      sessionStorage.setItem('cdc_done', JSON.stringify({
-        name: data.session?.name,
-        roll_number: data.session?.roll_number,
-        exam_title: data.exam?.title,
-        time_taken: res.data.time_taken_seconds,
-        attempted: Object.keys(answers).length,
-        total: data.questions?.length
-      }))
-      sessionStorage.removeItem('cdc_session')
-      navigate('/exam/done')
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Submit failed')
-      setSubmitting(false)
+  const startAntiCheat = (data) => {
+    // Fullscreen
+    try { document.documentElement.requestFullscreen?.() } catch {}
+
+    const blockKeys = (e) => {
+      if (e.ctrlKey && ['c','v','x','a','p'].includes(e.key.toLowerCase())) e.preventDefault()
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key==='I')) e.preventDefault()
     }
+    const blockRight = (e) => e.preventDefault()
+    const blockCopy = (e) => e.preventDefault()
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        clearTimeout(visGraceTimer.current)
+        visGraceTimer.current = setTimeout(() => {
+          violationCount.current++
+          setWarningMsg('⚠️ Tab switch detected! (' + violationCount.current + '/3)')
+          api.post('/exam/violation', { session_token: sessionToken.current, violation_type: 'tab_switch', details: {} }).catch(()=>{})
+          if (violationCount.current >= 3) {
+            showWarn('Too many violations! Auto-submitting...')
+            setTimeout(() => handleAutoSubmit('violation_limit'), 2000)
+          }
+        }, 2000)
+      } else {
+        clearTimeout(visGraceTimer.current)
+      }
+    }
+
+    const handleBlur = () => {
+      violationCount.current++
+      api.post('/exam/violation', { session_token: sessionToken.current, violation_type: 'window_blur', details: {} }).catch(()=>{})
+    }
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        showWarn('⚠️ Please stay in fullscreen mode!')
+        setTimeout(() => { try { document.documentElement.requestFullscreen?.() } catch {} }, 1000)
+      }
+    }
+
+    document.addEventListener('keydown', blockKeys)
+    document.addEventListener('contextmenu', blockRight)
+    document.addEventListener('copy', blockCopy)
+    document.addEventListener('paste', blockCopy)
+    document.addEventListener('cut', blockCopy)
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('blur', handleBlur)
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
   }
 
   const handleAutoSubmit = async (reason) => {
     clearInterval(timerRef.current)
     clearInterval(autoSaveTimer.current)
-    await saveAllAnswers()
+    setSubmitting(true)
     try {
+      await saveAllAnswers()
       const res = await api.post('/exam/submit', { session_token: sessionToken.current })
       const raw = sessionStorage.getItem('cdc_session')
       const data = raw ? JSON.parse(raw) : {}
@@ -345,50 +273,83 @@ export default function StudentExamPage() {
     navigate('/exam/done')
   }
 
-  if (!sessionData) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}><div className="spinner w-10 h-10" /></div>
+  const handleAnswer = async (questionId, option) => {
+    setAnswers(prev => ({ ...prev, [questionId]: option }))
+    try {
+      const timeSpent = Math.floor((Date.now() - qStartTime.current) / 1000)
+      await api.post('/exam/save-answer', {
+        session_token: sessionToken.current, question_id: questionId,
+        selected_option: option, time_spent_seconds: timeSpent
+      })
+    } catch {}
+  }
+
+  const handleBookmark = async (questionId) => {
+    const newVal = !bookmarks[questionId]
+    setBookmarks(prev => ({ ...prev, [questionId]: newVal }))
+    try {
+      await api.post('/exam/save-answer', {
+        session_token: sessionToken.current, question_id: questionId,
+        selected_option: answers[questionId] || null, is_bookmarked: newVal, time_spent_seconds: 0
+      })
+    } catch {}
+  }
+
+  if (!sessionData) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
+      <div className="spinner w-10 h-10" />
+    </div>
+  )
 
   const { exam } = sessionData
   const aptTimeMin = exam?.aptitude_time_minutes || 0
   const verTimeMin = exam?.verbal_time_minutes || 0
   const hasBothSections = aptTimeMin > 0 && verTimeMin > 0
+  const allQ = sessionData.questions || []
 
-  // Section selection screen
+  // ── SECTION SELECTION SCREEN ──────────────────────────────
   if (hasBothSections && !activeSection) {
-    const allQ = sessionData.questions || []
     return (
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--color-bg)', padding:16 }}>
-        <div style={{ width:'100%', maxWidth:480 }}>
-          <div style={{ textAlign:'center', marginBottom:28 }}>
-            <div style={{ width:60, height:60, background:'var(--color-primary)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:20, margin:'0 auto 10px' }}>CDC</div>
-            <h1 style={{ fontSize:21, fontWeight:700, color:'var(--color-text)', margin:0 }}>{exam?.title}</h1>
+        <div style={{ width:'100%', maxWidth:500 }}>
+          <div style={{ textAlign:'center', marginBottom:24 }}>
+            <div style={{ width:56, height:56, background:'var(--color-primary)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:18, margin:'0 auto 10px' }}>CDC</div>
+            <h1 style={{ fontSize:20, fontWeight:700, color:'var(--color-text)', margin:0 }}>{exam?.title}</h1>
             <p style={{ color:'var(--color-text-muted)', fontSize:13, marginTop:4 }}>Choose a section to begin</p>
           </div>
-          <div style={{ background:'var(--color-surface2)', borderRadius:10, padding:14, marginBottom:18, fontSize:12, color:'var(--color-text-muted)', lineHeight:1.8 }}>
-            <p style={{ fontWeight:700, color:'var(--color-danger)', marginBottom:6 }}>⚠️ Read carefully before starting:</p>
+
+          <div style={{ background:'var(--color-surface2)', borderRadius:10, padding:14, marginBottom:16, fontSize:12, color:'var(--color-text-muted)', lineHeight:1.9 }}>
+            <p style={{ fontWeight:700, color:'var(--color-danger)', marginBottom:4 }}>⚠️ Read carefully:</p>
             <p>• Each section has its own countdown timer</p>
-            <p>• Once you start a section you <strong>CANNOT go back</strong></p>
-            <p>• Unused time is <strong>NOT transferred</strong> to the next section</p>
-            <p>• You can submit a section early but remaining time is <strong>lost</strong></p>
+            <p>• Once started, you <strong>CANNOT go back</strong> to a section</p>
+            <p>• Unused section time is <strong>NOT transferred</strong></p>
+            <p>• Submit a section early — remaining time is <strong>lost</strong></p>
           </div>
-          <div style={{ display:'grid', gap:10 }}>
+
+          <div style={{ display:'grid', gap:12 }}>
             <button onClick={() => handleSectionSelect('aptitude_reasoning')}
-              style={{ padding:'18px 20px', background:'var(--color-surface)', border:'2px solid var(--color-primary)', borderRadius:12, cursor:'pointer', textAlign:'left' }}>
+              style={{ padding:'20px 24px', background:'var(--color-surface)', border:'2px solid var(--color-primary)', borderRadius:12, cursor:'pointer', textAlign:'left', width:'100%' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
-                  <div style={{ fontSize:16, fontWeight:700, color:'var(--color-text)' }}>🧮 Aptitude & Reasoning</div>
-                  <div style={{ fontSize:12, color:'var(--color-text-muted)', marginTop:3 }}>{allQ.filter(q=>q.section==='aptitude_reasoning').length} questions</div>
+                  <div style={{ fontSize:17, fontWeight:700, color:'var(--color-text)' }}>🧮 Aptitude & Reasoning</div>
+                  <div style={{ fontSize:13, color:'var(--color-text-muted)', marginTop:4 }}>
+                    {allQ.filter(q => q.section === 'aptitude_reasoning').length} questions
+                  </div>
                 </div>
-                <div style={{ fontSize:22, fontWeight:700, color:'var(--color-primary)' }}>{aptTimeMin} min</div>
+                <div style={{ fontSize:24, fontWeight:700, color:'var(--color-primary)' }}>{aptTimeMin} min</div>
               </div>
             </button>
+
             <button onClick={() => handleSectionSelect('verbal')}
-              style={{ padding:'18px 20px', background:'var(--color-surface)', border:'2px solid var(--color-warning)', borderRadius:12, cursor:'pointer', textAlign:'left' }}>
+              style={{ padding:'20px 24px', background:'var(--color-surface)', border:'2px solid var(--color-warning)', borderRadius:12, cursor:'pointer', textAlign:'left', width:'100%' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
-                  <div style={{ fontSize:16, fontWeight:700, color:'var(--color-text)' }}>📝 Verbal</div>
-                  <div style={{ fontSize:12, color:'var(--color-text-muted)', marginTop:3 }}>{allQ.filter(q=>q.section==='verbal').length} questions</div>
+                  <div style={{ fontSize:17, fontWeight:700, color:'var(--color-text)' }}>📝 Verbal</div>
+                  <div style={{ fontSize:13, color:'var(--color-text-muted)', marginTop:4 }}>
+                    {allQ.filter(q => q.section === 'verbal').length} questions
+                  </div>
                 </div>
-                <div style={{ fontSize:22, fontWeight:700, color:'var(--color-warning)' }}>{verTimeMin} min</div>
+                <div style={{ fontSize:24, fontWeight:700, color:'var(--color-warning)' }}>{verTimeMin} min</div>
               </div>
             </button>
           </div>
@@ -396,192 +357,181 @@ export default function StudentExamPage() {
       </div>
     )
   }
-  // Filter questions by current section if both sections exist
-  const questions = sessionData.has_both_sections && currentSection
-    ? sessionData.questions.filter(q => q.section === currentSection)
-    : sessionData.questions
+
+  // ── EXAM SCREEN ───────────────────────────────────────────
+  const questions = hasBothSections && activeSection
+    ? allQ.filter(q => q.section === activeSection)
+    : allQ
+
   const currentQ = questions[currentIdx]
-  const otherSectionDone = sessionData.has_both_sections
-    ? (currentSection === 'aptitude_reasoning'
-        ? sectionSubmitted.verbal
-        : sectionSubmitted.aptitude_reasoning)
-    : false
-  const otherSectionPending = sessionData.has_both_sections
-    ? (currentSection === 'aptitude_reasoning'
-        ? !sectionSubmitted.verbal && (sessionData.verbal_questions?.length > 0)
-        : !sectionSubmitted.aptitude_reasoning && (sessionData.aptitude_questions?.length > 0))
-    : false
-  const answered = Object.keys(answers).length
-  const bookmarked = Object.values(bookmarks).filter(Boolean).length
   const mins = Math.floor(timeLeft / 60)
   const secs = timeLeft % 60
   const timeColor = timeLeft < 300 ? 'var(--color-danger)' : timeLeft < 600 ? 'var(--color-warning)' : 'var(--color-success)'
+  const otherSection = activeSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
+  const otherSectionPending = hasBothSections && !sectionDone[otherSection]
 
   const getStatus = (idx) => {
     const q = questions[idx]
-    if (answers[q.id]) return 'answered'
-    if (bookmarks[q.id]) return 'bookmarked'
-    if (idx < currentIdx) return 'visited'
-    return 'none'
+    if (bookmarks[q?.id]) return 'bookmarked'
+    if (answers[q?.id]) return 'answered'
+    if (idx === currentIdx) return 'current'
+    return 'unattempted'
   }
-  const statusBg = { answered: 'var(--color-success)', bookmarked: 'var(--color-warning)', visited: 'var(--color-danger)', none: 'var(--color-border)' }
+
+  const statusStyle = (s) => {
+    if (s === 'answered') return { background: 'var(--color-success)', color: 'white' }
+    if (s === 'bookmarked') return { background: 'var(--color-warning)', color: 'white' }
+    if (s === 'current') return { background: 'var(--color-primary)', color: 'white' }
+    return { background: 'var(--color-surface2)', color: 'var(--color-text-muted)' }
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--color-bg)', userSelect: 'none' }}>
-
+    <div style={{ minHeight:'100vh', background:'var(--color-bg)', fontFamily:'inherit' }}>
       {/* Warning banner */}
       {warningMsg && (
-        <div style={{ position: 'sticky', top: 0, zIndex: 100, padding: '10px 16px', textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#fff', background: violationCount.current >= 3 ? 'var(--color-danger)' : '#d97706' }}>
-          ⚠ {warningMsg}
+        <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:1000, background:'var(--color-danger)', color:'white', padding:'10px 16px', textAlign:'center', fontWeight:600, fontSize:14 }}>
+          {warningMsg}
         </div>
       )}
 
       {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ position:'sticky', top:0, zIndex:100, background:'var(--color-surface)', borderBottom:'1px solid var(--color-border)', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-text)' }}>{exam.title}</div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{sessionData.session.name} · {sessionData.session.roll_number}</div>
+          <div style={{ fontWeight:700, fontSize:14, color:'var(--color-text)' }}>{exam?.title}</div>
+          {hasBothSections && activeSection && (
+            <div style={{ fontSize:11, color: activeSection === 'aptitude_reasoning' ? 'var(--color-primary)' : 'var(--color-warning)', fontWeight:600 }}>
+              {activeSection === 'aptitude_reasoning' ? '🧮 Aptitude & Reasoning' : '📝 Verbal'}
+              {sectionDone[otherSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'] && ' · Other section done ✓'}
+            </div>
+          )}
         </div>
-        <div style={{ fontFamily: 'monospace', fontSize: 24, fontWeight: 700, color: timeColor }}>
+        <div style={{ fontSize:22, fontWeight:800, color:timeColor, fontVariantNumeric:'tabular-nums' }}>
           {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}
         </div>
-        <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--color-text-muted)', alignItems: 'center' }}>
-          {violations > 0 && <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>⚠ {violations}/3</span>}
-          <span>{answered}/{questions.length} answered</span>
-        </div>
-      </header>
-
-      {/* Progress bar */}
-      <div style={{ height: 4, background: 'var(--color-border)' }}>
-        <div style={{ height: 4, width: ((currentIdx+1)/questions.length*100)+'%', background: 'var(--color-primary)', transition: 'width 0.3s' }} />
       </div>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Main question area */}
-        <main style={{ flex: 1, overflowY: 'auto', padding: mobile ? '16px' : '24px 32px' }}>
-          <div style={{ maxWidth: 720, margin: '0 auto' }}>
-
-            {/* Section + bookmark */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                <span style={{ fontWeight: 600 }}>Q{currentIdx+1}/{questions.length}</span>
-                <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 4, background: 'var(--color-surface2)', fontSize: 11 }}>
-                  {currentQ.section === 'aptitude_reasoning' ? 'Aptitude' : 'Verbal'}
+      <div style={{ display:'flex', maxWidth:1200, margin:'0 auto', padding:16, gap:16, flexDirection: mobile ? 'column' : 'row' }}>
+        {/* Question area */}
+        <div style={{ flex:1, minWidth:0 }}>
+          {currentQ ? (
+            <div className="card">
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+                <span style={{ fontSize:13, color:'var(--color-text-muted)', fontWeight:600 }}>
+                  Question {currentIdx + 1} of {questions.length}
                 </span>
-                <span style={{ marginLeft: 6 }}>{currentQ.topic}</span>
+                <button onClick={() => handleBookmark(currentQ.id)} style={{ background:'none', border:'none', cursor:'pointer', color: bookmarks[currentQ.id] ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
+                  {bookmarks[currentQ.id] ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
+                </button>
               </div>
-              <button onClick={() => toggleBookmark(currentQ.id)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: bookmarks[currentQ.id] ? '#fef3c7' : 'var(--color-surface2)', color: bookmarks[currentQ.id] ? '#92400e' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                {bookmarks[currentQ.id] ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-                {bookmarks[currentQ.id] ? 'Bookmarked' : 'Bookmark'}
-              </button>
-            </div>
 
-            {/* Question card */}
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: mobile ? '16px' : '20px 24px', marginBottom: 16 }}>
-              <p style={{ fontSize: mobile ? 15 : 16, lineHeight: 1.7, color: 'var(--color-text)', margin: 0 }}>{currentQ.question_text}</p>
-              {currentQ.image_url && <img src={currentQ.image_url} alt="" style={{ marginTop: 12, maxWidth: '100%', borderRadius: 8 }} />}
-            </div>
+              <p style={{ fontSize:16, color:'var(--color-text)', lineHeight:1.6, marginBottom:20 }}>{currentQ.question_text}</p>
 
-            {/* Options — large tap targets on mobile */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-              {['A','B','C','D'].map(opt => {
-                const text = currentQ.display_options?.[opt] || currentQ['option_' + opt.toLowerCase()]
-                const selected = answers[currentQ.id] === opt
-                return (
-                  <button key={opt} onClick={() => selectAnswer(currentQ.id, opt)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 14, padding: mobile ? '14px 16px' : '12px 16px', borderRadius: 12, border: selected ? '2px solid var(--color-primary)' : '1.5px solid var(--color-border)', background: selected ? 'var(--color-primary)15' : 'var(--color-surface)', cursor: 'pointer', textAlign: 'left', width: '100%', minHeight: 52 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, background: selected ? 'var(--color-primary)' : 'var(--color-surface2)', color: selected ? '#fff' : 'var(--color-text-muted)' }}>{opt}</div>
-                    <span style={{ fontSize: mobile ? 15 : 14, color: 'var(--color-text)', lineHeight: 1.5 }}>{text}</span>
-                  </button>
-                )
-              })}
-            </div>
+              <div style={{ display:'grid', gap:10 }}>
+                {['A','B','C','D'].map(opt => {
+                  const val = currentQ['option_' + opt.toLowerCase()]
+                  const selected = answers[currentQ.id] === opt
+                  return (
+                    <button key={opt} onClick={() => handleAnswer(currentQ.id, opt)}
+                      style={{ padding:'12px 16px', borderRadius:10, border:`2px solid ${selected ? 'var(--color-primary)' : 'var(--color-border)'}`, background: selected ? 'var(--color-primary)15' : 'var(--color-surface)', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:10, transition:'all 0.15s' }}>
+                      <span style={{ width:28, height:28, borderRadius:'50%', background: selected ? 'var(--color-primary)' : 'var(--color-surface2)', color: selected ? 'white' : 'var(--color-text-muted)', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:13, flexShrink:0 }}>{opt}</span>
+                      <span style={{ fontSize:14, color:'var(--color-text)' }}>{val}</span>
+                    </button>
+                  )
+                })}
+              </div>
 
-            {/* Nav buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button onClick={() => setCurrentIdx(i => Math.max(0, i-1))} disabled={currentIdx===0} className="btn-secondary">
-                <ChevronLeft size={18} /> {mobile ? '' : 'Previous'}
-              </button>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {answers[currentQ.id] && (
-                  <button onClick={() => { const a = {...answers}; delete a[currentQ.id]; setAnswers(a); api.post('/exam/save-answer', { session_token: sessionToken.current, question_id: currentQ.id, selected_option: null }) }}
-                    className="btn-secondary" style={{ color: 'var(--color-danger)', fontSize: 13 }}>Clear</button>
-                )}
-                {currentIdx < questions.length - 1
-                  ? <button onClick={goNext} className="btn-primary">{mobile ? '' : 'Next'} <ChevronRight size={18} /></button>
-                  : <button onClick={() => setShowSubmitConfirm(true)} className="btn-primary" style={{ background: 'var(--color-success)' }}><Send size={18} /> Submit</button>
-                }
+              <div style={{ display:'flex', justifyContent:'space-between', marginTop:20, gap:8 }}>
+                <button onClick={() => { setCurrentIdx(i => Math.max(0, i-1)); qStartTime.current = Date.now() }}
+                  disabled={currentIdx === 0} className="btn-secondary">← Prev</button>
+                <button onClick={() => setAnswers(prev => { const n = {...prev}; delete n[currentQ.id]; return n })}
+                  className="btn-secondary" style={{ color:'var(--color-danger)' }}>Clear</button>
+                <button onClick={() => { setCurrentIdx(i => Math.min(questions.length-1, i+1)); qStartTime.current = Date.now() }}
+                  disabled={currentIdx === questions.length-1} className="btn-secondary">Next →</button>
               </div>
             </div>
-          </div>
-        </main>
+          ) : (
+            <div className="card" style={{ textAlign:'center', padding:40 }}>
+              <p style={{ color:'var(--color-text-muted)' }}>No questions in this section</p>
+            </div>
+          )}
+        </div>
 
-        {/* Question palette — desktop only */}
-        {!mobile && (
-          <aside style={{ width: 240, flexShrink: 0, borderLeft: '1px solid var(--color-border)', background: 'var(--color-surface)', overflowY: 'auto', padding: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, color: 'var(--color-text)' }}>Question Palette</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 16 }}>
-              {questions.map((q, idx) => {
+        {/* Sidebar */}
+        <div style={{ width: mobile ? '100%' : 280, flexShrink:0 }}>
+          <div className="card" style={{ marginBottom:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:12 }}>
+              {[['Answered', Object.keys(answers).filter(id => questions.find(q=>q.id===id)).length, 'var(--color-success)'],
+                ['Bookmarked', Object.keys(bookmarks).filter(id => bookmarks[id] && questions.find(q=>q.id===id)).length, 'var(--color-warning)'],
+                ['Total', questions.length, 'var(--color-primary)']
+              ].map(([label, val, color]) => (
+                <div key={label} style={{ textAlign:'center', padding:'8px 4px', background:'var(--color-surface2)', borderRadius:8 }}>
+                  <div style={{ fontSize:18, fontWeight:700, color }}>{val}</div>
+                  <div style={{ fontSize:10, color:'var(--color-text-muted)' }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Question grid */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:4, marginBottom:12 }}>
+              {questions.map((_, idx) => {
                 const s = getStatus(idx)
-                const isCur = idx === currentIdx
                 return (
-                  <button key={idx} onClick={() => setCurrentIdx(idx)}
-                    style={{ width: 36, height: 36, borderRadius: 8, fontSize: 11, fontWeight: 700, border: isCur ? '2px solid var(--color-primary)' : '1px solid transparent', background: isCur ? 'var(--color-primary)' : statusBg[s], color: (s !== 'none' || isCur) ? '#fff' : 'var(--color-text-muted)', opacity: s === 'none' ? 0.4 : 1, cursor: 'pointer' }}>
+                  <button key={idx} onClick={() => { setCurrentIdx(idx); qStartTime.current = Date.now() }}
+                    style={{ ...statusStyle(s), border:'none', borderRadius:6, padding:'6px 2px', fontSize:11, fontWeight:600, cursor:'pointer' }}>
                     {idx+1}
                   </button>
                 )
               })}
             </div>
-            <div style={{ fontSize: 11, lineHeight: 2, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-              <div>🟢 {Object.keys(answers).length} answered</div>
-              <div>🔴 {questions.length - Object.keys(answers).length} not answered</div>
-              <div>🟡 {bookmarked} bookmarked</div>
-            </div>
-            {/* Submit Section button - only shown when both sections exist */}
-            {sessionData.has_both_sections && otherSectionPending && (
-              <button onClick={async () => {
-                if (!confirm('Submit ' + (currentSection === 'aptitude_reasoning' ? 'Aptitude' : 'Verbal') + ' section and move to next? Time will NOT carry over.')) return
-                try {
-                  await api.post('/exam/submit-section', { session_token: sessionToken.current, section: currentSection })
-                  setSectionSubmitted(prev => ({ ...prev, [currentSection]: true }))
-                  const nextSection = currentSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
-                  // Set timer for next section
-                  const nextTime = nextSection === 'aptitude_reasoning'
-                    ? (exam.aptitude_time_minutes > 0 ? exam.aptitude_time_minutes * 60 : exam.duration_minutes * 60)
-                    : (exam.verbal_time_minutes > 0 ? exam.verbal_time_minutes * 60 : exam.duration_minutes * 60)
-                  setTimeLeft(nextTime)
-                  setCurrentSection(nextSection)
-                  setCurrentIdx(0)
-                  await api.post('/exam/start-section', { session_token: sessionToken.current, section: nextSection })
-                  toast.success('Moving to ' + (nextSection === 'verbal' ? 'Verbal' : 'Aptitude') + ' section!')
-                } catch { toast.error('Failed to submit section') }
-              }} className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: 'var(--color-primary)', marginBottom: 8 }}>
-                <Check size={14} /> Submit {currentSection === 'aptitude_reasoning' ? 'Aptitude' : 'Verbal'} & Start Next Section
+
+            {/* Submit section button */}
+            {hasBothSections && activeSection && !sectionDone[activeSection] && (
+              <button onClick={handleSectionSubmit} disabled={sectionSubmitting}
+                className="btn-primary" style={{ width:'100%', justifyContent:'center', marginBottom:8, background:'var(--color-primary)' }}>
+                {sectionSubmitting ? <div className="spinner w-4 h-4" /> : <Check size={14} />}
+                Submit {activeSection === 'aptitude_reasoning' ? 'Aptitude' : 'Verbal'} →
               </button>
             )}
-            <button onClick={() => setShowSubmitConfirm(true)} className="btn-primary" style={{ width: '100%', justifyContent: 'center', background: 'var(--color-success)' }}>
+
+            {/* Submit full exam */}
+            <button onClick={() => setShowSubmitConfirm(true)}
+              className="btn-primary" style={{ width:'100%', justifyContent:'center', background:'var(--color-success)' }}>
               <Send size={14} /> Submit Exam
             </button>
-          </aside>
-        )}
+          </div>
+
+          {/* Legend */}
+          <div className="card" style={{ padding:10 }}>
+            {[['var(--color-success)','Answered'],['var(--color-warning)','Bookmarked'],['var(--color-primary)','Current'],['var(--color-surface2)','Not attempted']].map(([color, label]) => (
+              <div key={label} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                <div style={{ width:14, height:14, borderRadius:3, background:color, flexShrink:0 }} />
+                <span style={{ fontSize:11, color:'var(--color-text-muted)' }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Submit confirm modal */}
       {showSubmitConfirm && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.6)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: 400 }}>
-            <h3 style={{ fontWeight: 700, fontSize: 17, color: 'var(--color-text)', marginBottom: 12 }}>Submit Exam?</h3>
-            <div style={{ fontSize: 14, color: 'var(--color-text-muted)', marginBottom: 20, lineHeight: 1.8 }}>
-              <div>✅ Answered: <strong style={{ color: 'var(--color-text)' }}>{answered}</strong></div>
-              <div>⬜ Unanswered: <strong style={{ color: 'var(--color-danger)' }}>{questions.length - answered}</strong></div>
-              <div>🔖 Bookmarked: <strong style={{ color: 'var(--color-warning)' }}>{bookmarked}</strong></div>
-              <div style={{ color: 'var(--color-danger)', marginTop: 6 }}>⚠ You cannot go back after submitting!</div>
+        <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'rgba(0,0,0,0.6)' }}>
+          <div className="card" style={{ width:'100%', maxWidth:400 }}>
+            <h3 style={{ fontWeight:700, fontSize:17, color:'var(--color-text)', marginBottom:12 }}>Submit Exam?</h3>
+            <div style={{ marginBottom:16, fontSize:13 }}>
+              <p style={{ color:'var(--color-text-muted)', marginBottom:8 }}>Your progress:</p>
+              <p style={{ color:'var(--color-text)' }}>✅ Answered: <strong>{Object.keys(answers).length}</strong></p>
+              <p style={{ color:'var(--color-text)' }}>📝 Total: <strong>{allQ.length}</strong></p>
+              {hasBothSections && (
+                <p style={{ color:'var(--color-warning)', marginTop:8, fontSize:12 }}>
+                  ⚠️ {otherSectionPending ? `You haven't attempted the ${otherSection === 'verbal' ? 'Verbal' : 'Aptitude'} section yet!` : 'Both sections attempted.'}
+                </p>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowSubmitConfirm(false)} className="btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>Review</button>
-              <button onClick={handleSubmit} disabled={submitting} className="btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--color-success)' }}>
-                {submitting ? <div className="spinner w-4 h-4" /> : <Send size={16} />}
-                {submitting ? 'Submitting...' : 'Confirm'}
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => setShowSubmitConfirm(false)} className="btn-secondary" style={{ flex:1 }}>Cancel</button>
+              <button onClick={() => handleAutoSubmit('manual')} disabled={submitting}
+                className="btn-primary" style={{ flex:1, background:'var(--color-success)', justifyContent:'center' }}>
+                {submitting ? <div className="spinner w-4 h-4" /> : <Send size={14} />} Confirm Submit
               </button>
             </div>
           </div>
