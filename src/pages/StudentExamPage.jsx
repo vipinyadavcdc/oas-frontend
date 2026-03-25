@@ -61,7 +61,12 @@ export default function StudentExamPage() {
       setAnswers(restored)
     }
 
-    startAntiCheat(data)
+    // Don't start anti-cheat yet if sections exist — start after section selection
+    const aptT = (data.exam.aptitude_time_minutes || 0) * 60
+    const verT = (data.exam.verbal_time_minutes || 0) * 60
+    if (!(aptT > 0 && verT > 0)) {
+      startAntiCheat(data)
+    }
     startHeartbeat()
     startAutoSave()
 
@@ -136,6 +141,9 @@ export default function StudentExamPage() {
     activeSectionRef.current = section
     setCurrentIdx(0)
     setTimeLeft(sectionTime)
+
+    // Start anti-cheat now that section is selected
+    startAntiCheat(data)
 
     try { await api.post('/exam/start-section', { session_token: sessionToken.current, section }) } catch {}
   }
