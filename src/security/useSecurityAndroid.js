@@ -2,7 +2,7 @@
 // For: Android Chrome / WebView
 
 import { useRef, useCallback } from 'react'
-import api from '../../utils/api'
+import api from '../utils/api'
 
 export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) {
   const listenersRef = useRef([])
