@@ -4,7 +4,7 @@
 // We work WITHIN iOS limitations — no crashes, no white screens
 
 import { useRef, useCallback } from 'react'
-import api from '../../utils/api'
+import api from '../utils/api'
 
 export function useSecurityIOS({ sessionToken, onViolation, onAutoSubmit }) {
   const listenersRef = useRef([])
