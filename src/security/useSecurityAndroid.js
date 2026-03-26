@@ -1,20 +1,24 @@
-// CDC OAS — Android Security Hook
+// CDC OAS — Android Security Hook v3.1 (FIXED)
+// Fix: sessionToken read as ref object (sessionToken.current) at call time
 // For: Android Chrome / WebView
 
 import { useRef, useCallback } from 'react'
 import api from '../utils/api'
 
 export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) {
-  const listenersRef = useRef([])
+  const listenersRef       = useRef([])
   const windowListenersRef = useRef([])
-  const clearSelInterval = useRef(null)
-  const visGraceTimer = useRef(null)
-  const appSwitchCount = useRef(0)
+  const clearSelInterval   = useRef(null)
+  const visGraceTimer      = useRef(null)
+  const appSwitchCount     = useRef(0)
 
+  // ── KEY FIX: always read sessionToken.current at call time ──────────────────
   const logViolation = useCallback(async (type, details = {}) => {
     try {
+      const token = typeof sessionToken === 'object' ? sessionToken.current : sessionToken
+      if (!token) return
       await api.post('/exam/violation', {
-        session_token: sessionToken,
+        session_token: token,
         violation_type: type,
         details: { ...details, platform: 'android' }
       })
@@ -22,7 +26,8 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
   }, [sessionToken])
 
   const start = useCallback(() => {
-    // ── 1. FULLSCREEN (Android supports it) ──────────────────────────────────
+
+    // ── 1. FULLSCREEN ──────────────────────────────────────────────────────────
     try {
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {})
@@ -31,7 +36,7 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
       }
     } catch {}
 
-    // ── 2. APP SWITCH / TAB SWITCH DETECTION ─────────────────────────────────
+    // ── 2. APP SWITCH / TAB SWITCH DETECTION ──────────────────────────────────
     const handleVisibility = () => {
       if (document.hidden) {
         clearTimeout(visGraceTimer.current)
@@ -47,7 +52,6 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
     document.addEventListener('visibilitychange', handleVisibility)
     listenersRef.current.push(['visibilitychange', handleVisibility, document])
 
-    // Also catch pagehide (home button / recent apps)
     const handlePageHide = () => {
       appSwitchCount.current++
       logViolation('app_switch', { trigger: 'pagehide', count: appSwitchCount.current })
@@ -56,30 +60,26 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
     window.addEventListener('pagehide', handlePageHide)
     windowListenersRef.current.push(['pagehide', handlePageHide])
 
-    // ── 3. CIRCLE TO SEARCH / SPLIT SCREEN (resize trick) ────────────────────
+    // ── 3. CIRCLE TO SEARCH / SPLIT SCREEN ────────────────────────────────────
     const origHeight = window.innerHeight
     const origWidth  = window.innerWidth
     const handleResize = () => {
       const hRatio = window.innerHeight / origHeight
       const wRatio = window.innerWidth  / origWidth
       if (hRatio < 0.75 || wRatio < 0.75) {
-        logViolation('split_screen_or_ai', {
-          hRatio: hRatio.toFixed(2),
-          wRatio: wRatio.toFixed(2),
-          trigger: 'resize'
-        })
-        onViolation('split_screen')
+        logViolation('split_screen_or_ai', { hRatio: hRatio.toFixed(2), wRatio: wRatio.toFixed(2) })
+        onViolation('split_screen_or_ai')
       }
     }
     window.addEventListener('resize', handleResize)
     windowListenersRef.current.push(['resize', handleResize])
 
-    // ── 4. LONG PRESS / CONTEXT MENU BLOCK (Circle to Search) ────────────────
+    // ── 4. CONTEXT MENU / LONG PRESS BLOCK ────────────────────────────────────
     const blockContextMenu = (e) => e.preventDefault()
     document.addEventListener('contextmenu', blockContextMenu)
     listenersRef.current.push(['contextmenu', blockContextMenu, document])
 
-    // ── 5. TOUCH-BASED TEXT SELECTION BLOCK ──────────────────────────────────
+    // ── 5. TEXT SELECTION BLOCK ────────────────────────────────────────────────
     const blockSelect = (e) => e.preventDefault()
     document.addEventListener('selectstart', blockSelect)
     listenersRef.current.push(['selectstart', blockSelect, document])
@@ -96,18 +96,17 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
       if (window.getSelection) window.getSelection().removeAllRanges()
     }, { passive: true })
 
-    // Continuously kill any selection (defeats Circle to Search)
     clearSelInterval.current = setInterval(() => {
       if (window.getSelection) window.getSelection().removeAllRanges()
-      if (document.selection) document.selection.empty()
+      if (document.selection)  document.selection.empty()
     }, 300)
 
-    // ── 6. TEXT SELECTION CSS BLOCK ──────────────────────────────────────────
-    document.body.style.userSelect = 'none'
-    document.body.style.webkitUserSelect = 'none'
-    document.body.style.webkitTouchCallout = 'none'
+    // ── 6. TEXT SELECTION CSS BLOCK ────────────────────────────────────────────
+    document.body.style.userSelect          = 'none'
+    document.body.style.webkitUserSelect    = 'none'
+    document.body.style.webkitTouchCallout  = 'none'
 
-    // ── 7. BACK BUTTON BLOCK ─────────────────────────────────────────────────
+    // ── 7. BACK BUTTON BLOCK ──────────────────────────────────────────────────
     history.pushState(null, '', location.href)
     const handlePopState = () => {
       history.pushState(null, '', location.href)
@@ -117,7 +116,7 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
     window.addEventListener('popstate', handlePopState)
     windowListenersRef.current.push(['popstate', handlePopState])
 
-    // ── 8. COPY / PASTE / CUT BLOCK ──────────────────────────────────────────
+    // ── 8. COPY / PASTE / CUT BLOCK ───────────────────────────────────────────
     const blockClipboard = (e) => e.preventDefault()
     document.addEventListener('copy',  blockClipboard)
     document.addEventListener('paste', blockClipboard)
@@ -128,7 +127,7 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
       ['cut',   blockClipboard, document]
     )
 
-    // ── 9. KEYBOARD SHORTCUT BLOCK ───────────────────────────────────────────
+    // ── 9. KEYBOARD SHORTCUT BLOCK ─────────────────────────────────────────────
     const blockKeys = (e) => {
       const k = e.key?.toLowerCase()
       if (e.ctrlKey && ['c','v','x','a','p','s'].includes(k)) e.preventDefault()
@@ -137,15 +136,14 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
     document.addEventListener('keydown', blockKeys)
     listenersRef.current.push(['keydown', blockKeys, document])
 
-    // ── 10. TOUCH OUTSIDE EXAM AREA BLOCK ────────────────────────────────────
-    // Prevents accidental notification bar pulls if page is fullscreen
+    // ── 10. TOUCH OUTSIDE TOP AREA BLOCK ──────────────────────────────────────
     const blockTopTouch = (e) => {
       if (e.touches[0]?.clientY < 20) e.preventDefault()
     }
     document.addEventListener('touchstart', blockTopTouch, { passive: false })
     listenersRef.current.push(['touchstart', blockTopTouch, document])
 
-    // ── 11. ORIENTATION LOCK (portrait preferred for phones) ─────────────────
+    // ── 11. ORIENTATION LOCK ───────────────────────────────────────────────────
     try {
       if (screen.orientation?.lock) {
         screen.orientation.lock('portrait').catch(() => {})
@@ -157,12 +155,12 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
   const stop = useCallback(() => {
     listenersRef.current.forEach(([ev, fn, target]) => target.removeEventListener(ev, fn))
     windowListenersRef.current.forEach(([ev, fn]) => window.removeEventListener(ev, fn))
-    listenersRef.current = []
+    listenersRef.current       = []
     windowListenersRef.current = []
     clearInterval(clearSelInterval.current)
     clearTimeout(visGraceTimer.current)
-    document.body.style.userSelect = ''
-    document.body.style.webkitUserSelect = ''
+    document.body.style.userSelect         = ''
+    document.body.style.webkitUserSelect   = ''
     document.body.style.webkitTouchCallout = ''
     try { screen.orientation?.unlock?.() } catch {}
   }, [])

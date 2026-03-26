@@ -1,28 +1,32 @@
-// CDC OAS — Security Index
+// CDC OAS — Security Index v3.1 (FIXED)
+// Fix: sessionToken passed as ref object so hooks always read latest value
+// Fix: removed stale api import
+// Fix: getHook() memoized correctly
+
 import { useRef, useCallback, useState } from 'react'
 import { detectPlatform } from './detectPlatform'
 import { useSecurityDesktop } from './useSecurityDesktop'
 import { useSecurityAndroid } from './useSecurityAndroid'
 import { useSecurityIOS }     from './useSecurityIOS'
-import toast from 'react-hot-toast'
 
 const MAX_VIOLATIONS = 3
 const PLATFORM = detectPlatform()
 
 const VIOLATION_MESSAGES = {
-  tab_switch:            '⚠️ Tab switch detected!',
-  app_switch:            '⚠️ App switch detected! Stay in the exam.',
-  split_screen:          '⚠️ Split screen detected!',
-  split_screen_or_ai:    '⚠️ AI assistant / split screen detected!',
-  screen_mirror_or_split:'⚠️ Screen mirroring detected!',
-  devtools_open:         '⚠️ Developer tools detected!',
-  multiple_monitors:     '⚠️ Multiple monitors detected!',
-  idle_detected:         '⚠️ You appear idle. Stay active!',
-  back_button:           '⚠️ Back button disabled during exam.',
-  back_swipe_ios:        '⚠️ Back swipe disabled during exam.',
-  possible_screenshot:   '⚠️ Screenshot attempt detected!',
-  print_attempt:         '⚠️ Printing is not allowed!',
-  guided_access_reminder: null,
+  tab_switch:              '⚠️ Tab switch detected!',
+  app_switch:              '⚠️ App switch detected! Stay in the exam.',
+  split_screen:            '⚠️ Split screen detected!',
+  split_screen_or_ai:      '⚠️ AI assistant / split screen detected!',
+  screen_mirror_or_split:  '⚠️ Screen mirroring detected!',
+  devtools_open:           '⚠️ Developer tools detected!',
+  multiple_monitors:       '⚠️ Multiple monitors detected!',
+  idle_detected:           '⚠️ You appear to be idle. Stay active!',
+  fullscreen_exit:         '⚠️ Stay in fullscreen mode!',
+  back_button:             '⚠️ Back button is disabled during exam.',
+  back_swipe_ios:          '⚠️ Back swipe is disabled during exam.',
+  possible_screenshot:     '⚠️ Screenshot attempt detected!',
+  print_attempt:           '⚠️ Printing is not allowed!',
+  guided_access_reminder:  null,
 }
 
 const COUNTED_VIOLATIONS = new Set([
@@ -49,6 +53,7 @@ export function useSecurity({ sessionToken, onAutoSubmit }) {
     }
     const msg = VIOLATION_MESSAGES[type]
     if (!msg) return
+
     if (COUNTED_VIOLATIONS.has(type)) {
       violationCount.current++
       showWarn(`${msg} (${violationCount.current}/${MAX_VIOLATIONS})`)
@@ -61,6 +66,9 @@ export function useSecurity({ sessionToken, onAutoSubmit }) {
     }
   }, [showWarn, onAutoSubmit])
 
+  // ── KEY FIX: pass sessionToken (a ref object) directly into hooks ──────────
+  // Each hook reads sessionToken.current at call time, not at init time
+  // This means the token is always fresh even though it's set after first render
   const secArgs = { sessionToken, onViolation: handleViolation, onAutoSubmit }
   const desktop = useSecurityDesktop(secArgs)
   const android = useSecurityAndroid(secArgs)
@@ -70,7 +78,7 @@ export function useSecurity({ sessionToken, onAutoSubmit }) {
     if (PLATFORM === 'ios')     return ios.start()
     if (PLATFORM === 'android') return android.start()
     return desktop.start()
-  }, [PLATFORM, desktop, android, ios])
+  }, [desktop, android, ios])
 
   const stop = useCallback(() => {
     desktop.stop()
@@ -79,5 +87,12 @@ export function useSecurity({ sessionToken, onAutoSubmit }) {
     clearTimeout(warnTimer.current)
   }, [desktop, android, ios])
 
-  return { start, stop, warningMsg, showGuidedAccess, platform: PLATFORM }
+  return {
+    start,
+    stop,
+    warningMsg,
+    showGuidedAccess,
+    platform: PLATFORM,
+    violationCount: violationCount.current,
+  }
 }

@@ -1,23 +1,28 @@
-// CDC OAS — Desktop Security Hook
+// CDC OAS — Desktop Security Hook v3.1 (FIXED)
+// Fix: sessionToken read as ref object (sessionToken.current) at call time
+// Fix: fullscreen exit uses violation key 'fullscreen_exit' not raw string
 // For: Laptop / PC browsers (Chrome, Firefox, Edge, Safari desktop)
 
 import { useRef, useCallback } from 'react'
 import api from '../utils/api'
 
 export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) {
-  const listenersRef = useRef([])
+  const listenersRef       = useRef([])
   const windowListenersRef = useRef([])
-  const clearSelInterval = useRef(null)
-  const visGraceTimer = useRef(null)
-  const devToolsInterval = useRef(null)
-  const idleTimer = useRef(null)
-  const focusLossCount = useRef(0)
-  const IDLE_TIMEOUT_MS = 120000 // 2 minutes idle = warning
+  const clearSelInterval   = useRef(null)
+  const visGraceTimer      = useRef(null)
+  const devToolsInterval   = useRef(null)
+  const idleTimer          = useRef(null)
+  const focusLossCount     = useRef(0)
+  const IDLE_TIMEOUT_MS    = 120000 // 2 minutes
 
+  // ── KEY FIX: always read sessionToken.current at call time ──────────────────
   const logViolation = useCallback(async (type, details = {}) => {
     try {
+      const token = typeof sessionToken === 'object' ? sessionToken.current : sessionToken
+      if (!token) return // don't log if token not yet set
       await api.post('/exam/violation', {
-        session_token: sessionToken,
+        session_token: token,
         violation_type: type,
         details: { ...details, platform: 'desktop' }
       })
@@ -25,7 +30,8 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
   }, [sessionToken])
 
   const start = useCallback(() => {
-    // ── 1. FULLSCREEN ────────────────────────────────────────────────────────
+
+    // ── 1. FULLSCREEN ──────────────────────────────────────────────────────────
     try {
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {})
@@ -34,7 +40,7 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
 
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
-        onViolation('⚠️ Stay in fullscreen mode!')
+        onViolation('fullscreen_exit') // ← FIXED: was raw string, now a key
         setTimeout(() => {
           try { document.documentElement.requestFullscreen?.().catch(() => {}) } catch {}
         }, 800)
@@ -43,29 +49,22 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     listenersRef.current.push(['fullscreenchange', handleFullscreenChange, document])
 
-    // ── 2. KEYBOARD SHORTCUT BLOCKING ────────────────────────────────────────
+    // ── 2. KEYBOARD SHORTCUT BLOCKING ─────────────────────────────────────────
     const blockKeys = (e) => {
       const k = e.key?.toLowerCase()
-      // DevTools
       if (e.key === 'F12') { e.preventDefault(); return }
       if (e.ctrlKey && e.shiftKey && ['i','j','c','k'].includes(k)) { e.preventDefault(); return }
-      if (e.ctrlKey && k === 'u') { e.preventDefault(); return }
-      // Print / Save
-      if (e.ctrlKey && ['p','s'].includes(k)) { e.preventDefault(); return }
-      // Copy / Paste / Cut / Select all
-      if (e.ctrlKey && ['c','v','x','a'].includes(k)) { e.preventDefault(); return }
-      // View source
-      if (e.ctrlKey && k === 'u') { e.preventDefault(); return }
+      if (e.ctrlKey && ['u','p','s','c','v','x','a'].includes(k)) { e.preventDefault(); return }
     }
     document.addEventListener('keydown', blockKeys)
     listenersRef.current.push(['keydown', blockKeys, document])
 
-    // ── 3. RIGHT CLICK / CONTEXT MENU ────────────────────────────────────────
+    // ── 3. RIGHT CLICK BLOCK ──────────────────────────────────────────────────
     const blockRight = (e) => e.preventDefault()
     document.addEventListener('contextmenu', blockRight)
     listenersRef.current.push(['contextmenu', blockRight, document])
 
-    // ── 4. COPY / PASTE / CUT ────────────────────────────────────────────────
+    // ── 4. COPY / PASTE / CUT ─────────────────────────────────────────────────
     const blockClipboard = (e) => e.preventDefault()
     document.addEventListener('copy',  blockClipboard)
     document.addEventListener('paste', blockClipboard)
@@ -76,37 +75,36 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
       ['cut',   blockClipboard, document]
     )
 
-    // ── 5. PRINT BLOCK ───────────────────────────────────────────────────────
+    // ── 5. PRINT BLOCK ────────────────────────────────────────────────────────
     const blockPrint = () => {
-      onViolation('⚠️ Printing is not allowed!')
+      onViolation('print_attempt')
       logViolation('print_attempt')
     }
     window.addEventListener('beforeprint', blockPrint)
     windowListenersRef.current.push(['beforeprint', blockPrint])
 
-    // ── 6. TEXT SELECTION BLOCK ──────────────────────────────────────────────
-    document.body.style.userSelect = 'none'
+    // ── 6. TEXT SELECTION BLOCK ───────────────────────────────────────────────
+    document.body.style.userSelect       = 'none'
     document.body.style.webkitUserSelect = 'none'
-    document.body.style.mozUserSelect = 'none'
-    document.body.style.msUserSelect = 'none'
+    document.body.style.mozUserSelect    = 'none'
+    document.body.style.msUserSelect     = 'none'
     const blockSelect = (e) => e.preventDefault()
     document.addEventListener('selectstart', blockSelect)
     listenersRef.current.push(['selectstart', blockSelect, document])
 
-    // Continuously clear any selection
     clearSelInterval.current = setInterval(() => {
       if (window.getSelection) window.getSelection().removeAllRanges()
-      if (document.selection) document.selection.empty()
+      if (document.selection)  document.selection.empty()
     }, 500)
 
-    // ── 7. TAB SWITCH / VISIBILITY CHANGE ────────────────────────────────────
+    // ── 7. TAB SWITCH / VISIBILITY CHANGE ─────────────────────────────────────
     const handleVisibility = () => {
       if (document.hidden) {
         clearTimeout(visGraceTimer.current)
         visGraceTimer.current = setTimeout(() => {
           logViolation('tab_switch')
           onViolation('tab_switch')
-        }, 1500) // 1.5s grace for accidental
+        }, 1500)
       } else {
         clearTimeout(visGraceTimer.current)
       }
@@ -114,7 +112,7 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
     document.addEventListener('visibilitychange', handleVisibility)
     listenersRef.current.push(['visibilitychange', handleVisibility, document])
 
-    // ── 8. WINDOW BLUR (focus loss) ──────────────────────────────────────────
+    // ── 8. WINDOW BLUR (focus loss) ───────────────────────────────────────────
     const handleBlur = () => {
       focusLossCount.current++
       logViolation('window_blur', { count: focusLossCount.current })
@@ -122,7 +120,7 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
     window.addEventListener('blur', handleBlur)
     windowListenersRef.current.push(['blur', handleBlur])
 
-    // ── 9. SPLIT SCREEN / WINDOW RESIZE ──────────────────────────────────────
+    // ── 9. SPLIT SCREEN DETECTION ─────────────────────────────────────────────
     const origHeight = window.screen.height
     const origWidth  = window.screen.width
     const handleResize = () => {
@@ -136,10 +134,10 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
     window.addEventListener('resize', handleResize)
     windowListenersRef.current.push(['resize', handleResize])
 
-    // ── 10. DEVTOOLS DETECTION ───────────────────────────────────────────────
+    // ── 10. DEVTOOLS DETECTION ────────────────────────────────────────────────
     let devToolsOpen = false
     devToolsInterval.current = setInterval(() => {
-      const threshold = 160
+      const threshold  = 160
       const widthDiff  = window.outerWidth  - window.innerWidth  > threshold
       const heightDiff = window.outerHeight - window.innerHeight > threshold
       if ((widthDiff || heightDiff) && !devToolsOpen) {
@@ -151,15 +149,15 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
       }
     }, 2000)
 
-    // ── 11. MULTIPLE MONITOR DETECTION ──────────────────────────────────────
+    // ── 11. MULTIPLE MONITOR DETECTION ───────────────────────────────────────
     try {
-      if (window.screen.isExtended !== undefined && window.screen.isExtended) {
+      if (window.screen.isExtended) {
         logViolation('multiple_monitors')
         onViolation('multiple_monitors')
       }
     } catch {}
 
-    // ── 12. IDLE / AFK DETECTION ─────────────────────────────────────────────
+    // ── 12. IDLE / AFK DETECTION ──────────────────────────────────────────────
     const resetIdle = () => {
       clearTimeout(idleTimer.current)
       idleTimer.current = setTimeout(() => {
@@ -178,16 +176,16 @@ export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) 
   const stop = useCallback(() => {
     listenersRef.current.forEach(([ev, fn, target]) => target.removeEventListener(ev, fn))
     windowListenersRef.current.forEach(([ev, fn]) => window.removeEventListener(ev, fn))
-    listenersRef.current = []
+    listenersRef.current       = []
     windowListenersRef.current = []
     clearInterval(clearSelInterval.current)
     clearInterval(devToolsInterval.current)
     clearTimeout(visGraceTimer.current)
     clearTimeout(idleTimer.current)
-    document.body.style.userSelect = ''
+    document.body.style.userSelect       = ''
     document.body.style.webkitUserSelect = ''
-    document.body.style.mozUserSelect = ''
-    document.body.style.msUserSelect = ''
+    document.body.style.mozUserSelect    = ''
+    document.body.style.msUserSelect     = ''
   }, [])
 
   return { start, stop }
