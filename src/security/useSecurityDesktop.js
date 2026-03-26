@@ -2,7 +2,7 @@
 // For: Laptop / PC browsers (Chrome, Firefox, Edge, Safari desktop)
 
 import { useRef, useCallback } from 'react'
-import api from '../../utils/api'
+import api from '../utils/api'
 
 export function useSecurityDesktop({ sessionToken, onViolation, onAutoSubmit }) {
   const listenersRef = useRef([])
