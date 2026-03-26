@@ -1,8 +1,12 @@
+// CDC OAS — StudentEntryPage v3.0
+// Added: device fingerprint collection before exam start
+
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BookOpen, ArrowRight, MapPin } from 'lucide-react'
 import api from '../../utils/api'
 import toast from 'react-hot-toast'
+import { getDeviceFingerprint } from '../../security/deviceFingerprint'
 
 const DEPARTMENTS = [
   'Computer Science & Engineering', 'Information Technology', 'Electronics & Communication',
@@ -12,12 +16,12 @@ const DEPARTMENTS = [
 
 export default function StudentEntryPage() {
   const navigate = useNavigate()
-  const [step, setStep] = useState(1) // 1=room code, 2=details
-  const [roomCode, setRoomCode] = useState('')
-  const [exam, setExam] = useState(null)
+  const [step, setStep]           = useState(1)
+  const [roomCode, setRoomCode]   = useState('')
+  const [exam, setExam]           = useState(null)
   const [verifying, setVerifying] = useState(false)
-  const [starting, setStarting] = useState(false)
-  const [details, setDetails] = useState({
+  const [starting, setStarting]   = useState(false)
+  const [details, setDetails]     = useState({
     name: '', roll_number: '', mobile: '', email: '',
     university: '', department: '', section: ''
   })
@@ -43,25 +47,35 @@ export default function StudentEntryPage() {
     }
     setStarting(true)
     try {
-      // Get geolocation
+      // Collect geolocation
       let geo = null
       try {
-        await new Promise((res, rej) => {
+        await new Promise((res) => {
           navigator.geolocation.getCurrentPosition(
             pos => { geo = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }; res() },
-            () => res(), // proceed even if denied
+            () => res(),
             { timeout: 5000 }
           )
         })
       } catch {}
 
+      // Collect device fingerprint (runs in background, non-blocking)
+      let fingerprint = null
+      try {
+        fingerprint = await getDeviceFingerprint()
+      } catch {}
+
       const res = await api.post('/exam/start', {
-        exam_id: exam.id, room_code: roomCode.trim(), ...details, geolocation: geo
+        exam_id: exam.id,
+        room_code: roomCode.trim(),
+        ...details,
+        geolocation: geo,
+        device_fingerprint: fingerprint
       })
-      // Store session in sessionStorage
+
       sessionStorage.setItem('cdc_session', JSON.stringify({
-        session: res.data.session,
-        exam: res.data.exam,
+        session:   res.data.session,
+        exam:      res.data.exam,
         questions: res.data.questions
       }))
       navigate('/exam/start')
@@ -123,7 +137,7 @@ export default function StudentEntryPage() {
               </div>
             </div>
 
-            {/* Student details form */}
+            {/* Student details */}
             <div className="card shadow-xl">
               <h3 className="font-bold mb-4" style={{ color: 'var(--color-text)' }}>Your Details</h3>
               <form onSubmit={startExam} className="space-y-3">
@@ -175,11 +189,12 @@ export default function StudentEntryPage() {
                 {/* Instructions */}
                 <div className="rounded-lg p-3 text-xs space-y-1" style={{ background: 'var(--color-surface2)' }}>
                   <p className="font-semibold" style={{ color: 'var(--color-text)' }}>⚠️ Important Instructions:</p>
-                  <p style={{ color: 'var(--color-text-muted)' }}>• Do NOT switch tabs or windows — 3 violations = auto-submit</p>
-                  <p style={{ color: 'var(--color-text-muted)' }}>• Exam will run in fullscreen mode</p>
+                  <p style={{ color: 'var(--color-text-muted)' }}>• Do NOT switch tabs or apps — 3 violations = auto-submit</p>
+                  <p style={{ color: 'var(--color-text-muted)' }}>• Exam runs in fullscreen / locked mode</p>
                   <p style={{ color: 'var(--color-text-muted)' }}>• All violations are recorded and shown to trainer</p>
                   <p style={{ color: 'var(--color-text-muted)' }}>• Answers auto-save every 30 seconds</p>
                   <p style={{ color: 'var(--color-text-muted)' }}>• You cannot attempt this exam twice</p>
+                  <p style={{ color: 'var(--color-text-muted)' }}>• This device is fingerprinted for security</p>
                 </div>
 
                 <button type="submit" disabled={starting} className="btn-primary w-full justify-center py-3">
