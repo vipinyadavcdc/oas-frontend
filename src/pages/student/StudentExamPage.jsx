@@ -35,8 +35,11 @@ export default function StudentExamPage() {
   const answersRef      = useRef({})  // mirror of answers for use inside intervals
 
   // ── SECURITY HOOK (platform-aware) ──────────────────────────────────────────
+  // KEY FIX: pass the ref object itself (not .current) so hooks always read
+  // the latest token value — sessionToken.current is '' at first render but
+  // gets set to the real token inside the init useEffect below
   const { start: startSecurity, stop: stopSecurity, warningMsg, showGuidedAccess, platform } = useSecurity({
-    sessionToken: sessionToken.current,
+    sessionToken: sessionToken,
     onAutoSubmit: (reason) => handleAutoSubmit(reason),
   })
 
