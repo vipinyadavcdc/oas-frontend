@@ -65,6 +65,7 @@ export default function StudentExamPage() {
     showGuidedAccess,
     platform,
     violationCount,
+    cancelCountdown,
   } = useSecurity({
     tokenRef,
     autoSubmitRef,
@@ -194,11 +195,18 @@ export default function StudentExamPage() {
     startHeartbeat()
     startAutoSave()
 
+    // Cancel countdown when tab becomes visible again
+    const onTabReturn = () => {
+      if (!document.hidden) cancelCountdown?.()
+    }
+    document.addEventListener('visibilitychange', onTabReturn)
+
     return () => {
       clearInterval(timerRef.current)
       clearInterval(autoSaveTimer.current)
       clearInterval(heartbeatTimer.current)
       stopSecurity()
+      document.removeEventListener('visibilitychange', onTabReturn)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -364,6 +372,8 @@ export default function StudentExamPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wire handleAutoSubmit into ref — security hooks always call latest version
+  // Also wire immediately (not just in useEffect) so it's set on first render
+  autoSubmitRef.current = handleAutoSubmit
   useEffect(() => {
     autoSubmitRef.current = handleAutoSubmit
   }, [handleAutoSubmit])
