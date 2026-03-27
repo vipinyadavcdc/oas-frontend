@@ -53,21 +53,17 @@ export default function StudentExamPage() {
   }, [currentIdx, sessionData])
 
   // ── SECURITY HOOK ─────────────────────────────────────────────────────────
-  // autoSubmitRef — always points to latest handleAutoSubmit, never stale
-  // This is critical: useSecurity is called before handleAutoSubmit is defined,
-  // so we can't pass handleAutoSubmit directly. We use a ref instead.
-  const autoSubmitRef = useRef(null)
-
   // Pass tokenRef (object) NOT tokenRef.current (string) — this is the fix!
   const {
     start: startSecurity,
     stop:  stopSecurity,
     warningMsg,
     showGuidedAccess,
-    platform
+    platform,
+    violationCount,
   } = useSecurity({
     tokenRef,
-    autoSubmitRef,
+    onAutoSubmit: useCallback((reason) => handleAutoSubmit(reason), [])
   })
 
   // ── ANTI-COPY CSS (unconditional — must never be in a conditional) ────────
@@ -105,6 +101,12 @@ export default function StudentExamPage() {
     tokenRef.current = data.session.session_token
     setSessionData(data)
     setMobile(isMobileWidth())
+
+    // If resumed via master code, reset violation count to 1
+    // violationCount is the actual ref from the security hook
+    if (data.violation_reset_to && violationCount) {
+      violationCount.current = data.violation_reset_to
+    }
 
     // Restore saved answers
     if (data.answers?.length) {
@@ -339,23 +341,18 @@ export default function StudentExamPage() {
       const raw  = sessionStorage.getItem('cdc_session')
       const data = raw ? JSON.parse(raw) : {}
       sessionStorage.setItem('cdc_done', JSON.stringify({
-        name:        data.session?.name,
-        roll_number: data.session?.roll_number,
-        exam_title:  data.exam?.title,
-        time_taken:  res.data.time_taken_seconds,
-        attempted:   Object.keys(answersRef.current).length,
-        total:       data.questions?.length
+        name:           data.session?.name,
+        roll_number:    data.session?.roll_number,
+        participant_id: data.session?.participant_id,
+        exam_title:     data.exam?.title,
+        time_taken:     res.data.time_taken_seconds,
+        attempted:      Object.keys(answersRef.current).length,
+        total:          data.questions?.length
       }))
     } catch {}
     sessionStorage.removeItem('cdc_session')
     navigate('/exam/done')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Wire handleAutoSubmit into ref so security hooks always call the latest version
-  // This must be AFTER handleAutoSubmit is defined
-  useEffect(() => {
-    autoSubmitRef.current = handleAutoSubmit
-  }, [handleAutoSubmit])
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
   const saveAllAnswers = async () => {
@@ -562,6 +559,11 @@ export default function StudentExamPage() {
             <Shield size={10} />
             {platform === 'ios' ? 'iOS' : platform === 'android' ? 'Android' : 'Desktop'}
           </div>
+          {sessionData?.session?.participant_id && (
+            <div style={{ fontSize:10, color:'var(--color-warning)', fontWeight:700, fontFamily:'monospace', background:'var(--color-surface2)', padding:'2px 8px', borderRadius:4, letterSpacing:1, border:'1px solid var(--color-warning)' }}>
+              ID: {sessionData.session.participant_id}
+            </div>
+          )}
           <div style={{ fontSize:22, fontWeight:800, color:timeColor, fontVariantNumeric:'tabular-nums' }}>
             {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}
           </div>

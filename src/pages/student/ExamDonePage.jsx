@@ -33,6 +33,7 @@ export default function ExamDonePage() {
             {[
               ['Name', info.name],
               ['Roll No.', info.roll_number],
+              ['Participant ID', info.participant_id || '—'],
               ['Exam', info.exam_title],
               ['Time taken', info.time_taken ? Math.floor(info.time_taken / 60) + ' min ' + (info.time_taken % 60) + ' sec' : '—'],
               ['Questions attempted', info.attempted !== undefined ? info.attempted + ' of ' + info.total : '—'],
