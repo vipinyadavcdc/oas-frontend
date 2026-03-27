@@ -1,6 +1,6 @@
-// CDC OAS — Student Exam Page v3.0
-// Platform-aware security: Desktop / Android / iOS isolated hooks
-// 2026-03-26
+// CDC OAS — StudentExamPage v3.1
+// Fix 1: tokenRef pattern — security hooks always get correct session token
+// Fix 2: refresh resume — restores correct section + remaining time on reload
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -13,40 +13,48 @@ const isMobileWidth = () => window.innerWidth < 768
 
 export default function StudentExamPage() {
   const navigate = useNavigate()
-  const [sessionData, setSessionData]           = useState(null)
-  const [currentIdx, setCurrentIdx]             = useState(0)
-  const [answers, setAnswers]                   = useState({})
-  const [bookmarks, setBookmarks]               = useState({})
-  const [timeLeft, setTimeLeft]                 = useState(0)
-  const [activeSection, setActiveSection]       = useState(null)
-  const [sectionDone, setSectionDone]           = useState({ aptitude_reasoning: false, verbal: false })
+
+  const [sessionData, setSessionData]             = useState(null)
+  const [currentIdx, setCurrentIdx]               = useState(0)
+  const [answers, setAnswers]                     = useState({})
+  const [bookmarks, setBookmarks]                 = useState({})
+  const [timeLeft, setTimeLeft]                   = useState(0)
+  const [activeSection, setActiveSection]         = useState(null)
+  const [sectionDone, setSectionDone]             = useState({ aptitude_reasoning: false, verbal: false })
   const [sectionSubmitting, setSectionSubmitting] = useState(false)
-  const [submitting, setSubmitting]             = useState(false)
+  const [submitting, setSubmitting]               = useState(false)
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
-  const [mobile, setMobile]                     = useState(isMobileWidth())
+  const [mobile, setMobile]                       = useState(isMobileWidth())
 
-  const sessionToken    = useRef('')
-  const autoSaveTimer   = useRef(null)
-  const heartbeatTimer  = useRef(null)
-  const timerRef        = useRef(null)
-  const extraMinutes    = useRef(0)
-  const qStartTime      = useRef(Date.now())
+  // ── REFS ──────────────────────────────────────────────────────────────────
+  // tokenRef is passed to security hooks — they always read .current (never stale)
+  const tokenRef         = useRef('')
+  const autoSaveTimer    = useRef(null)
+  const heartbeatTimer   = useRef(null)
+  const timerRef         = useRef(null)
+  const extraMinutes     = useRef(0)
+  const qStartTime       = useRef(Date.now())
   const activeSectionRef = useRef(null)
-  const answersRef      = useRef({})  // mirror of answers for use inside intervals
+  const answersRef       = useRef({})   // mirror for use inside intervals
+  const securityStarted  = useRef(false) // prevent double-start
 
-  // ── SECURITY HOOK (platform-aware) ──────────────────────────────────────────
-  // KEY FIX: pass the ref object itself (not .current) so hooks always read
-  // the latest token value — sessionToken.current is '' at first render but
-  // gets set to the real token inside the init useEffect below
-  const { start: startSecurity, stop: stopSecurity, warningMsg, showGuidedAccess, platform } = useSecurity({
-    sessionToken: sessionToken,
-    onAutoSubmit: (reason) => handleAutoSubmit(reason),
-  })
-
-  // Keep answersRef in sync
+  // Keep answersRef in sync with state
   useEffect(() => { answersRef.current = answers }, [answers])
 
-  // ── ANTI-COPY CSS (must be at top level — no conditional hooks) ─────────────
+  // ── SECURITY HOOK ─────────────────────────────────────────────────────────
+  // Pass tokenRef (object) NOT tokenRef.current (string) — this is the fix!
+  const {
+    start: startSecurity,
+    stop:  stopSecurity,
+    warningMsg,
+    showGuidedAccess,
+    platform
+  } = useSecurity({
+    tokenRef,
+    onAutoSubmit: useCallback((reason) => handleAutoSubmit(reason), [])
+  })
+
+  // ── ANTI-COPY CSS (unconditional — must never be in a conditional) ────────
   useEffect(() => {
     const style = document.createElement('style')
     style.id = 'anti-copy-style'
@@ -63,45 +71,112 @@ export default function StudentExamPage() {
         -webkit-user-select: text !important;
         user-select: text !important;
       }
-      ::selection       { background: transparent !important; color: inherit !important; }
-      ::-moz-selection  { background: transparent !important; color: inherit !important; }
+      ::selection      { background: transparent !important; color: inherit !important; }
+      ::-moz-selection { background: transparent !important; color: inherit !important; }
       @media print { body { display: none !important; } }
     `
     document.head.appendChild(style)
-    return () => { document.getElementById('anti-copy-style')?.remove() }
+    return () => document.getElementById('anti-copy-style')?.remove()
   }, [])
 
-  // ── INIT ─────────────────────────────────────────────────────────────────────
+  // ── INIT ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const raw = sessionStorage.getItem('cdc_session')
     if (!raw) { navigate('/exam'); return }
     const data = JSON.parse(raw)
+
+    // Set token into ref FIRST — security hooks will read from here
+    tokenRef.current = data.session.session_token
     setSessionData(data)
-    sessionToken.current = data.session.session_token
     setMobile(isMobileWidth())
 
-    const aptTime = (data.exam.aptitude_time_minutes || 0) * 60
-    const verTime = (data.exam.verbal_time_minutes || 0) * 60
-    const hasSec  = aptTime > 0 && verTime > 0
-
-    if (!hasSec) {
-      const fullDuration = data.exam.duration_minutes * 60
-      if (data.exam.end_time) {
-        const secsLeft = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
-        setTimeLeft(Math.min(fullDuration, Math.max(0, secsLeft)))
-      } else {
-        setTimeLeft(fullDuration)
-      }
-      // No sections — start security immediately
-      startSecurity()
-    }
-    // If sections exist, security starts when student picks a section
-
+    // Restore saved answers
     if (data.answers?.length) {
       const restored = {}
-      data.answers.forEach(a => { if (a.selected_option) restored[a.question_id] = a.selected_option })
+      data.answers.forEach(a => {
+        if (a.selected_option) restored[a.question_id] = a.selected_option
+      })
       setAnswers(restored)
       answersRef.current = restored
+    }
+
+    const aptTimeSec = (data.exam.aptitude_time_minutes || 0) * 60
+    const verTimeSec = (data.exam.verbal_time_minutes   || 0) * 60
+    const hasSections = aptTimeSec > 0 && verTimeSec > 0
+
+    // ── RESUME LOGIC ──────────────────────────────────────────────────────
+    // If student refreshed mid-exam, restore their section + remaining time
+    if (data.resumed && data.session) {
+      const sess = data.session
+
+      // Which sections are already submitted?
+      const aptDone = !!sess.aptitude_submitted_at
+      const verDone = !!sess.verbal_submitted_at
+      setSectionDone({ aptitude_reasoning: aptDone, verbal: verDone })
+
+      if (hasSections && sess.current_section) {
+        // Restore active section
+        const section = sess.current_section
+        setActiveSection(section)
+        activeSectionRef.current = section
+
+        // Calculate remaining time for current section
+        const sectionTotalSec = section === 'aptitude_reasoning' ? aptTimeSec : verTimeSec
+        const startedAt = section === 'aptitude_reasoning'
+          ? sess.aptitude_started_at
+          : sess.verbal_started_at
+
+        if (startedAt) {
+          const elapsed    = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+          const remaining  = Math.max(0, sectionTotalSec - elapsed)
+          setTimeLeft(remaining)
+        } else {
+          setTimeLeft(sectionTotalSec)
+        }
+
+        // Start security — section is already active on resume
+        if (!securityStarted.current) {
+          securityStarted.current = true
+          startSecurity()
+        }
+
+      } else if (!hasSections) {
+        // No sections — restore remaining time from exam end_time or duration
+        const fullDuration = data.exam.duration_minutes * 60
+        if (data.exam.end_time) {
+          const secsLeft = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
+          setTimeLeft(Math.min(fullDuration, Math.max(0, secsLeft)))
+        } else if (sess.started_at) {
+          const elapsed   = Math.floor((Date.now() - new Date(sess.started_at).getTime()) / 1000)
+          const remaining = Math.max(0, fullDuration - elapsed)
+          setTimeLeft(remaining)
+        } else {
+          setTimeLeft(fullDuration)
+        }
+        if (!securityStarted.current) {
+          securityStarted.current = true
+          startSecurity()
+        }
+      }
+      // If resumed with sections but no current_section = they hadn't picked yet
+      // → fall through to section selection screen (correct behaviour)
+
+    } else {
+      // ── FRESH START ──────────────────────────────────────────────────────
+      if (!hasSections) {
+        const fullDuration = data.exam.duration_minutes * 60
+        if (data.exam.end_time) {
+          const secsLeft = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
+          setTimeLeft(Math.min(fullDuration, Math.max(0, secsLeft)))
+        } else {
+          setTimeLeft(fullDuration)
+        }
+        if (!securityStarted.current) {
+          securityStarted.current = true
+          startSecurity()
+        }
+      }
+      // With sections → wait for student to pick section before starting security
     }
 
     startHeartbeat()
@@ -113,115 +188,148 @@ export default function StudentExamPage() {
       clearInterval(heartbeatTimer.current)
       stopSecurity()
     }
-  }, []) // eslint-disable-line
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── TIMER ────────────────────────────────────────────────────────────────────
+  // ── TIMER ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionData) return
     clearInterval(timerRef.current)
     if (timeLeft <= 0) return
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
-        const newTime = prev - 1 + extraMinutes.current * 60
+        const next = prev - 1 + extraMinutes.current * 60
         extraMinutes.current = 0
-        if (newTime <= 0) { handleTimerEnd(); return 0 }
-        return newTime
+        if (next <= 0) { handleTimerEnd(); return 0 }
+        return next
       })
     }, 1000)
     return () => clearInterval(timerRef.current)
-  }, [sessionData, activeSection]) // eslint-disable-line
+  }, [sessionData, activeSection]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── TIMER END ────────────────────────────────────────────────────────────────
+  // ── TIMER END ─────────────────────────────────────────────────────────────
   const handleTimerEnd = async () => {
-    const data = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
-    const aptTime = (data.exam?.aptitude_time_minutes || 0) * 60
-    const verTime = (data.exam?.verbal_time_minutes || 0) * 60
-    const hasSec  = aptTime > 0 && verTime > 0
+    const data      = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+    const aptTime   = (data.exam?.aptitude_time_minutes || 0) * 60
+    const verTime   = (data.exam?.verbal_time_minutes   || 0) * 60
+    const hasSec    = aptTime > 0 && verTime > 0
     const curSection = activeSectionRef.current
 
     if (hasSec && curSection) {
-      const nextSection = curSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
-      const nextTime    = nextSection === 'aptitude_reasoning' ? aptTime : verTime
+      const next     = curSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
+      const nextTime = next === 'aptitude_reasoning' ? aptTime : verTime
 
-      if (sectionDone[nextSection]) {
+      if (sectionDone[next]) {
         toast.error('Time up! All sections complete.')
         handleAutoSubmit('timer_expired')
         return
       }
-
       try {
-        await api.post('/exam/submit-section', { session_token: sessionToken.current, section: curSection })
-        await api.post('/exam/start-section',  { session_token: sessionToken.current, section: nextSection })
+        await api.post('/exam/submit-section', { session_token: tokenRef.current, section: curSection })
+        await api.post('/exam/start-section',  { session_token: tokenRef.current, section: next })
       } catch {}
 
       setSectionDone(prev => ({ ...prev, [curSection]: true }))
-      setActiveSection(nextSection)
-      activeSectionRef.current = nextSection
+      setActiveSection(next)
+      activeSectionRef.current = next
       setCurrentIdx(0)
       setTimeLeft(nextTime)
-      toast.error('⏰ Time up! Moving to ' + (nextSection === 'verbal' ? 'Verbal' : 'Aptitude') + ' section')
+      toast.error(`⏰ Time up! Moving to ${next === 'verbal' ? 'Verbal' : 'Aptitude'} section`)
       return
     }
     handleAutoSubmit('timer_expired')
   }
 
-  // ── SECTION SELECT ───────────────────────────────────────────────────────────
+  // ── SECTION SELECT ────────────────────────────────────────────────────────
   const handleSectionSelect = async (section) => {
-    const data = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
-    const aptTime = (data.exam?.aptitude_time_minutes || 0) * 60
-    const verTime = (data.exam?.verbal_time_minutes || 0) * 60
-    const sectionTime = section === 'aptitude_reasoning' ? aptTime : verTime
+    const data     = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+    const aptTime  = (data.exam?.aptitude_time_minutes || 0) * 60
+    const verTime  = (data.exam?.verbal_time_minutes   || 0) * 60
+    const secTime  = section === 'aptitude_reasoning' ? aptTime : verTime
 
     setActiveSection(section)
     activeSectionRef.current = section
     setCurrentIdx(0)
-    setTimeLeft(sectionTime)
+    setTimeLeft(secTime)
 
-    // Start platform-specific security now
-    startSecurity()
+    // Start security NOW (token is already set in tokenRef)
+    if (!securityStarted.current) {
+      securityStarted.current = true
+      startSecurity()
+    }
 
-    try { await api.post('/exam/start-section', { session_token: sessionToken.current, section }) } catch {}
+    try {
+      await api.post('/exam/start-section', { session_token: tokenRef.current, section })
+    } catch {}
   }
 
-  // ── SECTION SUBMIT ───────────────────────────────────────────────────────────
+  // ── SECTION SUBMIT ────────────────────────────────────────────────────────
   const handleSectionSubmit = async () => {
     if (sectionSubmitting) return
     if (!confirm('Submit this section? You CANNOT go back!')) return
     setSectionSubmitting(true)
     try {
       await saveAllAnswers()
-      const data = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+      const data    = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
       const aptTime = (data.exam?.aptitude_time_minutes || 0) * 60
-      const verTime = (data.exam?.verbal_time_minutes || 0) * 60
-      const curSection  = activeSection
-      const nextSection = curSection === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
-      const nextTime    = nextSection === 'aptitude_reasoning' ? aptTime : verTime
+      const verTime = (data.exam?.verbal_time_minutes   || 0) * 60
+      const cur     = activeSection
+      const next    = cur === 'aptitude_reasoning' ? 'verbal' : 'aptitude_reasoning'
+      const nextTime = next === 'aptitude_reasoning' ? aptTime : verTime
 
-      await api.post('/exam/submit-section', { session_token: sessionToken.current, section: curSection })
-      setSectionDone(prev => ({ ...prev, [curSection]: true }))
+      await api.post('/exam/submit-section', { session_token: tokenRef.current, section: cur })
+      setSectionDone(prev => ({ ...prev, [cur]: true }))
 
-      if (sectionDone[nextSection]) {
+      if (sectionDone[next]) {
         await handleAutoSubmit('all_sections_done')
         return
       }
 
-      await api.post('/exam/start-section', { session_token: sessionToken.current, section: nextSection })
-      setActiveSection(nextSection)
-      activeSectionRef.current = nextSection
+      await api.post('/exam/start-section', { session_token: tokenRef.current, section: next })
+      setActiveSection(next)
+      activeSectionRef.current = next
       setCurrentIdx(0)
       setTimeLeft(nextTime)
-      toast.success('Section submitted! Now: ' + (nextSection === 'verbal' ? 'Verbal' : 'Aptitude & Reasoning'))
-    } catch { toast.error('Failed to submit section') }
-    finally { setSectionSubmitting(false) }
+      toast.success(`Section submitted! Now: ${next === 'verbal' ? 'Verbal' : 'Aptitude & Reasoning'}`)
+    } catch {
+      toast.error('Failed to submit section')
+    } finally {
+      setSectionSubmitting(false)
+    }
   }
 
-  // ── HELPERS ──────────────────────────────────────────────────────────────────
+  // ── AUTO SUBMIT ───────────────────────────────────────────────────────────
+  const handleAutoSubmit = useCallback(async (reason) => {
+    clearInterval(timerRef.current)
+    clearInterval(autoSaveTimer.current)
+    stopSecurity()
+    setSubmitting(true)
+    try {
+      await saveAllAnswers()
+      const res  = await api.post('/exam/submit', { session_token: tokenRef.current })
+      const raw  = sessionStorage.getItem('cdc_session')
+      const data = raw ? JSON.parse(raw) : {}
+      sessionStorage.setItem('cdc_done', JSON.stringify({
+        name:        data.session?.name,
+        roll_number: data.session?.roll_number,
+        exam_title:  data.exam?.title,
+        time_taken:  res.data.time_taken_seconds,
+        attempted:   Object.keys(answersRef.current).length,
+        total:       data.questions?.length
+      }))
+    } catch {}
+    sessionStorage.removeItem('cdc_session')
+    navigate('/exam/done')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── HELPERS ───────────────────────────────────────────────────────────────
   const saveAllAnswers = async () => {
     for (const [qId, option] of Object.entries(answersRef.current)) {
       try {
         await api.post('/exam/save-answer', {
-          session_token: sessionToken.current,
-          question_id: qId, selected_option: option, time_spent_seconds: 0
+          session_token:   tokenRef.current,
+          question_id:     qId,
+          selected_option: option,
+          time_spent_seconds: 0
         })
       } catch {}
     }
@@ -230,10 +338,10 @@ export default function StudentExamPage() {
   const startHeartbeat = () => {
     heartbeatTimer.current = setInterval(async () => {
       try {
-        const res = await api.post('/exam/heartbeat', { session_token: sessionToken.current })
+        const res = await api.post('/exam/heartbeat', { session_token: tokenRef.current })
         if (res.data.extraMinutes > 0) {
           extraMinutes.current += res.data.extraMinutes
-          toast.success('+' + res.data.extraMinutes + ' minutes added by trainer!')
+          toast.success(`+${res.data.extraMinutes} minutes added by trainer!`)
         }
         if (res.data.alive === false) {
           toast.error('Your session has been ended by the trainer')
@@ -248,44 +356,25 @@ export default function StudentExamPage() {
       for (const [qId, option] of Object.entries(answersRef.current)) {
         try {
           await api.post('/exam/save-answer', {
-            session_token: sessionToken.current,
-            question_id: qId, selected_option: option, time_spent_seconds: 0
+            session_token:   tokenRef.current,
+            question_id:     qId,
+            selected_option: option,
+            time_spent_seconds: 0
           })
         } catch {}
       }
     }, 30000)
   }
 
-  const handleAutoSubmit = useCallback(async (reason) => {
-    clearInterval(timerRef.current)
-    clearInterval(autoSaveTimer.current)
-    stopSecurity()
-    setSubmitting(true)
-    try {
-      await saveAllAnswers()
-      const res = await api.post('/exam/submit', { session_token: sessionToken.current })
-      const raw  = sessionStorage.getItem('cdc_session')
-      const data = raw ? JSON.parse(raw) : {}
-      sessionStorage.setItem('cdc_done', JSON.stringify({
-        name:       data.session?.name,
-        roll_number:data.session?.roll_number,
-        exam_title: data.exam?.title,
-        time_taken: res.data.time_taken_seconds,
-        attempted:  Object.keys(answersRef.current).length,
-        total:      data.questions?.length
-      }))
-    } catch {}
-    sessionStorage.removeItem('cdc_session')
-    navigate('/exam/done')
-  }, []) // eslint-disable-line
-
   const handleAnswer = async (questionId, option) => {
     setAnswers(prev => ({ ...prev, [questionId]: option }))
     try {
       const timeSpent = Math.floor((Date.now() - qStartTime.current) / 1000)
       await api.post('/exam/save-answer', {
-        session_token: sessionToken.current,
-        question_id: questionId, selected_option: option, time_spent_seconds: timeSpent
+        session_token:   tokenRef.current,
+        question_id:     questionId,
+        selected_option: option,
+        time_spent_seconds: timeSpent
       })
     } catch {}
   }
@@ -295,28 +384,29 @@ export default function StudentExamPage() {
     setBookmarks(prev => ({ ...prev, [questionId]: newVal }))
     try {
       await api.post('/exam/save-answer', {
-        session_token: sessionToken.current,
-        question_id: questionId,
+        session_token:   tokenRef.current,
+        question_id:     questionId,
         selected_option: answers[questionId] || null,
-        is_bookmarked: newVal, time_spent_seconds: 0
+        is_bookmarked:   newVal,
+        time_spent_seconds: 0
       })
     } catch {}
   }
 
-  // ── LOADING ──────────────────────────────────────────────────────────────────
+  // ── LOADING ───────────────────────────────────────────────────────────────
   if (!sessionData) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
       <div className="spinner w-10 h-10" />
     </div>
   )
 
-  const { exam } = sessionData
-  const aptTimeMin    = exam?.aptitude_time_minutes || 0
-  const verTimeMin    = exam?.verbal_time_minutes   || 0
+  const { exam }        = sessionData
+  const aptTimeMin      = exam?.aptitude_time_minutes || 0
+  const verTimeMin      = exam?.verbal_time_minutes   || 0
   const hasBothSections = aptTimeMin > 0 && verTimeMin > 0
-  const allQ          = sessionData.questions || []
+  const allQ            = sessionData.questions || []
 
-  // ── SECTION SELECTION SCREEN ─────────────────────────────────────────────────
+  // ── SECTION SELECTION SCREEN ──────────────────────────────────────────────
   if (hasBothSections && !activeSection) {
     return (
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--color-bg)', padding:16 }}>
@@ -367,7 +457,7 @@ export default function StudentExamPage() {
     )
   }
 
-  // ── EXAM SCREEN ───────────────────────────────────────────────────────────────
+  // ── EXAM SCREEN ───────────────────────────────────────────────────────────
   const questions   = hasBothSections && activeSection
     ? allQ.filter(q => q.section === activeSection)
     : allQ
@@ -387,30 +477,30 @@ export default function StudentExamPage() {
   }
 
   const statusStyle = (s) => {
-    if (s === 'answered')   return { background: 'var(--color-success)', color: 'white' }
-    if (s === 'bookmarked') return { background: 'var(--color-warning)', color: 'white' }
-    if (s === 'current')    return { background: 'var(--color-primary)', color: 'white' }
-    return { background: 'var(--color-surface2)', color: 'var(--color-text-muted)' }
+    if (s === 'answered')   return { background:'var(--color-success)', color:'white' }
+    if (s === 'bookmarked') return { background:'var(--color-warning)', color:'white' }
+    if (s === 'current')    return { background:'var(--color-primary)', color:'white' }
+    return { background:'var(--color-surface2)', color:'var(--color-text-muted)' }
   }
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--color-bg)', fontFamily:'inherit', userSelect:'none', WebkitUserSelect:'none' }}>
 
-      {/* ── VIOLATION WARNING BANNER ── */}
+      {/* VIOLATION WARNING BANNER */}
       {warningMsg && (
         <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:1000, background:'var(--color-danger)', color:'white', padding:'10px 16px', textAlign:'center', fontWeight:600, fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
           <AlertTriangle size={16} /> {warningMsg}
         </div>
       )}
 
-      {/* ── iOS GUIDED ACCESS BANNER ── */}
+      {/* iOS GUIDED ACCESS BANNER */}
       {showGuidedAccess && platform === 'ios' && (
         <div style={{ position:'fixed', top: warningMsg ? 44 : 0, left:0, right:0, zIndex:999, background:'var(--color-warning)', color:'white', padding:'8px 16px', textAlign:'center', fontSize:12, fontWeight:500 }}>
-          📱 For best security: Enable <strong>Guided Access</strong> (Triple-click home/side button)
+          📱 Enable <strong>Guided Access</strong> for best security (triple-click home/side button)
         </div>
       )}
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div style={{ position:'sticky', top: warningMsg ? 44 : 0, zIndex:100, background:'var(--color-surface)', borderBottom:'1px solid var(--color-border)', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div>
           <div style={{ fontWeight:700, fontSize:14, color:'var(--color-text)' }}>{exam?.title}</div>
@@ -422,7 +512,6 @@ export default function StudentExamPage() {
           )}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          {/* Platform indicator (subtle) */}
           <div style={{ fontSize:10, color:'var(--color-text-muted)', display:'flex', alignItems:'center', gap:3 }}>
             <Shield size={10} />
             {platform === 'ios' ? 'iOS' : platform === 'android' ? 'Android' : 'Desktop'}
@@ -435,7 +524,7 @@ export default function StudentExamPage() {
 
       <div style={{ display:'flex', maxWidth:1200, margin:'0 auto', padding:16, gap:16, flexDirection: mobile ? 'column' : 'row' }}>
 
-        {/* ── QUESTION AREA ── */}
+        {/* QUESTION AREA */}
         <div style={{ flex:1, minWidth:0 }}>
           {currentQ ? (
             <div className="card">
@@ -483,7 +572,7 @@ export default function StudentExamPage() {
           )}
         </div>
 
-        {/* ── SIDEBAR ── */}
+        {/* SIDEBAR */}
         <div style={{ width: mobile ? '100%' : 280, flexShrink:0 }}>
           <div className="card" style={{ marginBottom:12 }}>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:12 }}>
@@ -545,7 +634,7 @@ export default function StudentExamPage() {
         </div>
       </div>
 
-      {/* ── SUBMIT CONFIRM MODAL ── */}
+      {/* SUBMIT CONFIRM MODAL */}
       {showSubmitConfirm && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'rgba(0,0,0,0.6)' }}>
           <div className="card" style={{ width:'100%', maxWidth:400 }}>
