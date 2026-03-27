@@ -61,6 +61,7 @@ export default function StudentExamPage() {
     start: startSecurity,
     stop:  stopSecurity,
     warningMsg,
+    countdownMsg,
     showGuidedAccess,
     platform,
     violationCount,
@@ -542,9 +543,58 @@ export default function StudentExamPage() {
   return (
     <div style={{ minHeight:'100vh', background:'var(--color-bg)', fontFamily:'inherit', userSelect:'none', WebkitUserSelect:'none' }}>
 
+      {/* ROLLING BANNER — always visible during exam */}
+      <div style={{
+        position:'fixed', top:0, left:0, right:0, zIndex:1001,
+        background:'#1a1a2e', color:'#ff4444',
+        fontSize:11, fontWeight:500, overflow:'hidden',
+        height:22, display:'flex', alignItems:'center'
+      }}>
+        <div style={{
+          whiteSpace:'nowrap',
+          animation:'cdcScroll 35s linear infinite',
+          paddingLeft:'100%'
+        }}>
+          🔴 EXAM IN PROGRESS — Do not click outside this window — Tab switching is monitored — All violations are recorded and reported to the Central Examination Team — Stay in fullscreen at all times — Switching tabs or windows will result in auto-submission — 🔴 EXAM IN PROGRESS — Do not click outside this window — Tab switching is monitored — All violations are recorded and reported to the Central Examination Team — Stay in fullscreen at all times —
+        </div>
+        <style>{`
+          @keyframes cdcScroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+        `}</style>
+      </div>
+
+      {/* 8-SECOND COUNTDOWN BANNER — shown when student is away */}
+      {countdownMsg && (
+        <div style={{
+          position:'fixed', top:22, left:0, right:0, zIndex:1000,
+          background:'#7f1d1d', color:'white',
+          padding:'10px 16px', textAlign:'center',
+          fontWeight:700, fontSize:15,
+          display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+          animation:'cdcPulse 0.5s ease-in-out infinite alternate'
+        }}>
+          <style>{`
+            @keyframes cdcPulse {
+              from { opacity: 1; }
+              to   { opacity: 0.75; }
+            }
+          `}</style>
+          {countdownMsg}
+        </div>
+      )}
+
       {/* VIOLATION WARNING BANNER */}
       {warningMsg && (
-        <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:1000, background:'var(--color-danger)', color:'white', padding:'10px 16px', textAlign:'center', fontWeight:600, fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+        <div style={{
+          position:'fixed', top: countdownMsg ? 66 : 22,
+          left:0, right:0, zIndex:999,
+          background:'var(--color-danger)', color:'white',
+          padding:'8px 16px', textAlign:'center',
+          fontWeight:600, fontSize:14,
+          display:'flex', alignItems:'center', justifyContent:'center', gap:8
+        }}>
           <AlertTriangle size={16} /> {warningMsg}
         </div>
       )}
@@ -557,7 +607,7 @@ export default function StudentExamPage() {
       )}
 
       {/* HEADER */}
-      <div style={{ position:'sticky', top: warningMsg ? 44 : 0, zIndex:100, background:'var(--color-surface)', borderBottom:'1px solid var(--color-border)', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ position:'sticky', top: countdownMsg ? 66 : warningMsg ? 44 : 22, zIndex:100, background:'var(--color-surface)', borderBottom:'1px solid var(--color-border)', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div>
           <div style={{ fontWeight:700, fontSize:14, color:'var(--color-text)' }}>{exam?.title}</div>
           {hasBothSections && activeSection && (
