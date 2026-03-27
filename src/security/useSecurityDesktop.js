@@ -32,6 +32,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
   const showFullscreenPrompt = useCallback((isRefresh = false) => {
     // Remove any existing overlay first
     document.getElementById('cdc-fs-overlay')?.remove()
+    document.getElementById('cdc-split-overlay')?.remove()
 
     const overlay = document.createElement('div')
     overlay.id = 'cdc-fs-overlay'
@@ -72,10 +73,12 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
       document.documentElement.requestFullscreen?.()
         .then(() => {
           document.getElementById('cdc-fs-overlay')?.remove()
+    document.getElementById('cdc-split-overlay')?.remove()
         })
         .catch(() => {
           // If fullscreen still fails, just remove overlay and continue
           document.getElementById('cdc-fs-overlay')?.remove()
+    document.getElementById('cdc-split-overlay')?.remove()
         })
     })
   }, [])
@@ -114,6 +117,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
       } else {
         // Back in fullscreen — hide any overlay
         document.getElementById('cdc-fs-overlay')?.remove()
+    document.getElementById('cdc-split-overlay')?.remove()
       }
     }
     document.addEventListener('fullscreenchange', onFullscreenChange)
@@ -191,15 +195,47 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     window.addEventListener('blur', onBlur)
     windowListenersRef.current.push(['blur', onBlur])
 
-    // ── 9. SPLIT SCREEN / RESIZE ─────────────────────────────────────────────
+    // ── 9. SPLIT SCREEN / RESIZE — detect + BLOCK ───────────────────────────
     const origH = window.screen.height
     const origW = window.screen.width
+
+    const createSplitOverlay = () => {
+      if (document.getElementById('cdc-split-overlay')) return
+      const ol = document.createElement('div')
+      ol.id = 'cdc-split-overlay'
+      ol.style.cssText = 'display:flex;position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.95);color:white;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:sans-serif'
+      const icon = document.createElement('div')
+      icon.textContent = '⛔'
+      icon.style.cssText = 'font-size:56px;margin-bottom:16px'
+      const title = document.createElement('h2')
+      title.textContent = 'Split Screen Detected!'
+      title.style.cssText = 'font-size:22px;font-weight:700;color:#f87171;margin:0 0 12px 0'
+      const msg1 = document.createElement('p')
+      msg1.textContent = 'Split screen is not allowed during the exam. This violation has been recorded.'
+      msg1.style.cssText = 'font-size:15px;color:#d1d5db;margin-bottom:8px;line-height:1.6'
+      const msg2 = document.createElement('p')
+      msg2.textContent = 'Please maximise your window to continue.'
+      msg2.style.cssText = 'font-size:13px;color:#9ca3af;margin-bottom:0'
+      ol.appendChild(icon)
+      ol.appendChild(title)
+      ol.appendChild(msg1)
+      ol.appendChild(msg2)
+      document.body.appendChild(ol)
+    }
+
+    const removeSplitOverlay = () => {
+      document.getElementById('cdc-split-overlay')?.remove()
+    }
+
     const onResize = () => {
       const hR = window.innerHeight / origH
       const wR = window.innerWidth  / origW
       if (hR < 0.75 || wR < 0.75) {
+        createSplitOverlay()
         logViolation('split_screen', { hR: hR.toFixed(2), wR: wR.toFixed(2) })
         onViolation('split_screen')
+      } else {
+        removeSplitOverlay()
       }
     }
     window.addEventListener('resize', onResize)
@@ -257,6 +293,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     document.body.style.mozUserSelect    = ''
     document.body.style.msUserSelect     = ''
     document.getElementById('cdc-fs-overlay')?.remove()
+    document.getElementById('cdc-split-overlay')?.remove()
     try { if (document.fullscreenElement) document.exitFullscreen?.() } catch {}
   }, [])
 
