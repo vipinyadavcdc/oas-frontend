@@ -1,28 +1,26 @@
-// CDC OAS — Security Index v4.0
-// Two separate violation buckets:
-//   Tab bucket  — tab switch + fullscreen exit: max 3, 8s countdown auto-submit
-//   Blur bucket — window blur/taskbar/popups:   max 10, no countdown
+// CDC OAS — Security Index v4.1
+// Fix: autoSubmitRef always checked safely
+// Fix: countdown cancel doesn't require fullscreen
+// Two buckets: tab (max 3, 8s countdown) | blur (max 10, silent first 7)
 
-import { useRef, useCallback, useState } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import { detectPlatform } from './detectPlatform'
 import { useSecurityDesktop } from './useSecurityDesktop'
 import { useSecurityAndroid } from './useSecurityAndroid'
 import { useSecurityIOS }     from './useSecurityIOS'
 
-const MAX_TAB_VIOLATIONS  = 3   // tab switch + fullscreen exit
-const MAX_BLUR_VIOLATIONS = 10  // window blur / taskbar / popups
+const MAX_TAB_VIOLATIONS  = 3
+const MAX_BLUR_VIOLATIONS = 10
 const PLATFORM            = detectPlatform()
+const COUNTDOWN_SECONDS   = 8
 
-// Which bucket each violation goes into
 const TAB_VIOLATIONS = new Set([
   'tab_switch', 'app_switch', 'fullscreen_exit',
   'split_screen', 'split_screen_or_ai', 'screen_mirror_or_split',
   'devtools_open', 'possible_screenshot'
 ])
 
-const BLUR_VIOLATIONS = new Set([
-  'window_blur'
-])
+const BLUR_VIOLATIONS = new Set(['window_blur'])
 
 const VIOLATION_MESSAGES = {
   tab_switch:             '⚠️ Tab switch detected!',
@@ -43,52 +41,79 @@ const VIOLATION_MESSAGES = {
 }
 
 export function useSecurity({ tokenRef, autoSubmitRef }) {
-  const [warningMsg, setWarningMsg]             = useState('')
-  const [countdownMsg, setCountdownMsg]         = useState('')
+  const [warningMsg,     setWarningMsg]     = useState('')
+  const [countdownMsg,   setCountdownMsg]   = useState('')
   const [showGuidedAccess, setShowGuidedAccess] = useState(false)
 
-  const tabViolations  = useRef(0)  // tab switch bucket
-  const blurViolations = useRef(0)  // window blur bucket
-  const warnTimer      = useRef(null)
-  const countdownTimer = useRef(null)
-  const countdownInterval = useRef(null)
-
-  // expose for resume reset
-  const violationCount = useRef(0)
+  const tabViolations      = useRef(0)
+  const blurViolations     = useRef(0)
+  const violationCount     = useRef(0)
+  const warnTimer          = useRef(null)
+  const countdownInterval  = useRef(null)
+  const countdownActive    = useRef(false)
+  const studentIsAway      = useRef(false)
 
   const showWarn = useCallback((msg) => {
     setWarningMsg(msg)
     clearTimeout(warnTimer.current)
-    warnTimer.current = setTimeout(() => setWarningMsg(''), 7000)
+    warnTimer.current = setTimeout(() => setWarningMsg(''), 8000)
   }, [])
 
-  // 8-second countdown before auto-submit on tab violations
+  // Cancel countdown when student comes back
+  const cancelCountdown = useCallback(() => {
+    if (!countdownActive.current) return
+    countdownActive.current = false
+    studentIsAway.current   = false
+    clearInterval(countdownInterval.current)
+    setCountdownMsg('')
+  }, [])
+
+  // Listen for student returning — visibilitychange or click
+  useEffect(() => {
+    const onReturn = () => {
+      if (!document.hidden) cancelCountdown()
+    }
+    const onClick = () => cancelCountdown()
+
+    document.addEventListener('visibilitychange', onReturn)
+    document.addEventListener('click', onClick)
+    document.addEventListener('keydown', onClick)
+    return () => {
+      document.removeEventListener('visibilitychange', onReturn)
+      document.removeEventListener('click', onClick)
+      document.removeEventListener('keydown', onClick)
+    }
+  }, [cancelCountdown])
+
   const startCountdown = useCallback(() => {
-    let secs = 8
+    if (countdownActive.current) return // already counting
+    countdownActive.current = true
+    studentIsAway.current   = true
+
+    let secs = COUNTDOWN_SECONDS
     setCountdownMsg(`🚨 Return to exam! Auto-submitting in ${secs}s...`)
 
     countdownInterval.current = setInterval(() => {
+      // If student came back — stop countdown
+      if (!studentIsAway.current) {
+        clearInterval(countdownInterval.current)
+        countdownActive.current = false
+        setCountdownMsg('')
+        return
+      }
       secs--
       if (secs <= 0) {
         clearInterval(countdownInterval.current)
+        countdownActive.current = false
         setCountdownMsg('')
-        autoSubmitRef.current?.('tab_timeout')
+        // Fire auto-submit — check ref is set
+        if (autoSubmitRef.current) {
+          autoSubmitRef.current('tab_timeout')
+        }
       } else {
         setCountdownMsg(`🚨 Return to exam! Auto-submitting in ${secs}s...`)
       }
     }, 1000)
-
-    // Clear countdown if student comes back
-    const cancelOnReturn = () => {
-      if (!document.hidden && document.fullscreenElement) {
-        clearInterval(countdownInterval.current)
-        setCountdownMsg('')
-        document.removeEventListener('visibilitychange', cancelOnReturn)
-        document.removeEventListener('fullscreenchange', cancelOnReturn)
-      }
-    }
-    document.addEventListener('visibilitychange', cancelOnReturn)
-    document.addEventListener('fullscreenchange', cancelOnReturn)
   }, [autoSubmitRef])
 
   const handleViolation = useCallback((type) => {
@@ -104,13 +129,15 @@ export function useSecurity({ tokenRef, autoSubmitRef }) {
     if (TAB_VIOLATIONS.has(type)) {
       tabViolations.current++
       violationCount.current = tabViolations.current
+      studentIsAway.current  = true // mark student as away
 
       if (tabViolations.current >= MAX_TAB_VIOLATIONS) {
-        // Final violation — start 8s countdown
-        showWarn(`${msg} (${tabViolations.current}/${MAX_TAB_VIOLATIONS}) — Last warning!`)
+        showWarn(`${msg} (${tabViolations.current}/${MAX_TAB_VIOLATIONS}) — FINAL WARNING!`)
         startCountdown()
       } else {
         showWarn(`${msg} (${tabViolations.current}/${MAX_TAB_VIOLATIONS})`)
+        // Start countdown on every tab violation — cancel if they come back
+        startCountdown()
       }
       return
     }
@@ -120,16 +147,17 @@ export function useSecurity({ tokenRef, autoSubmitRef }) {
       blurViolations.current++
       if (blurViolations.current >= MAX_BLUR_VIOLATIONS) {
         showWarn('🚨 Too many focus losses! Submitting your exam...')
-        setTimeout(() => autoSubmitRef.current?.('blur_limit'), 2500)
-      } else if (blurViolations.current >= MAX_BLUR_VIOLATIONS - 3) {
-        // Warn when getting close (last 3)
-        showWarn(`${msg} (${blurViolations.current}/${MAX_BLUR_VIOLATIONS} focus losses)`)
+        setTimeout(() => {
+          if (autoSubmitRef.current) autoSubmitRef.current('blur_limit')
+        }, 2500)
+      } else if (blurViolations.current >= MAX_BLUR_VIOLATIONS - 2) {
+        showWarn(`⚠️ Focus lost (${blurViolations.current}/${MAX_BLUR_VIOLATIONS}) — Stay on exam window!`)
       }
-      // Silent for first few blur violations — don't distract student
+      // Silent for first 7 blur violations
       return
     }
 
-    // ── OTHER (non-counted, just warn) ────────────────────────────────────────
+    // ── OTHER ────────────────────────────────────────────────────────────────
     showWarn(msg)
   }, [showWarn, startCountdown, autoSubmitRef])
 
@@ -149,8 +177,8 @@ export function useSecurity({ tokenRef, autoSubmitRef }) {
     android.stop()
     ios.stop()
     clearTimeout(warnTimer.current)
-    clearTimeout(countdownTimer.current)
     clearInterval(countdownInterval.current)
+    countdownActive.current = false
     setCountdownMsg('')
   }, [desktop, android, ios])
 
@@ -158,11 +186,12 @@ export function useSecurity({ tokenRef, autoSubmitRef }) {
     start,
     stop,
     warningMsg,
-    countdownMsg,   // 8s countdown message for StudentExamPage to display
+    countdownMsg,
     showGuidedAccess,
     platform: PLATFORM,
     violationCount,
     tabViolations,
     blurViolations,
+    cancelCountdown,
   }
 }

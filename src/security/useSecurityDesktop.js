@@ -1,5 +1,6 @@
-// CDC OAS — Desktop Security Hook v3.2
-// Fixes: fullscreen overlay, violation counter, tab switch dedup
+// CDC OAS — Desktop Security Hook v3.3
+// Fix: fullscreen prompt on refresh (Chrome blocks auto-fullscreen)
+// Fix: all listeners re-register cleanly on every start() call
 
 import { useRef, useCallback } from 'react'
 import api from '../utils/api'
@@ -27,39 +28,37 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     } catch {}
   }, [tokenRef])
 
-  const start = useCallback(() => {
+  // Show fullscreen prompt overlay — works on both fresh start and refresh
+  const showFullscreenPrompt = useCallback((isRefresh = false) => {
+    // Remove any existing overlay first
+    document.getElementById('cdc-fs-overlay')?.remove()
 
-    // 1. FULLSCREEN - enter on start
-    try {
-      document.documentElement.requestFullscreen?.().catch(() => {})
-    } catch {}
-
-    // Blocking overlay shown when student exits fullscreen
-    // Chrome needs user gesture for requestFullscreen, so we use a button
     const overlay = document.createElement('div')
     overlay.id = 'cdc-fs-overlay'
-    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.93);color:white;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:sans-serif'
+    overlay.style.cssText = 'display:flex;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.95);color:white;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:sans-serif'
 
     const icon = document.createElement('div')
-    icon.textContent = '\u26A0\uFE0F'
     icon.style.cssText = 'font-size:52px;margin-bottom:16px'
+    icon.textContent = isRefresh ? '\uD83D\uDD04' : '\u26A0\uFE0F'
 
     const title = document.createElement('h2')
-    title.textContent = 'Fullscreen Required'
     title.style.cssText = 'font-size:22px;font-weight:700;margin-bottom:12px;color:#f87171;margin-top:0'
+    title.textContent = isRefresh ? 'Page Refreshed — Fullscreen Required' : 'Fullscreen Required'
 
     const msg1 = document.createElement('p')
-    msg1.textContent = 'You have exited fullscreen mode. This violation has been recorded.'
     msg1.style.cssText = 'font-size:15px;color:#d1d5db;margin-bottom:8px;line-height:1.6'
+    msg1.textContent = isRefresh
+      ? 'Your exam is still active. Click below to return to fullscreen and continue.'
+      : 'You have exited fullscreen mode. This violation has been recorded.'
 
     const msg2 = document.createElement('p')
-    msg2.textContent = 'You must return to fullscreen to continue your exam.'
     msg2.style.cssText = 'font-size:13px;color:#9ca3af;margin-bottom:28px'
+    msg2.textContent = 'You must be in fullscreen to continue your exam.'
 
     const btn = document.createElement('button')
     btn.id = 'cdc-fs-btn'
-    btn.textContent = '\uD83D\uDD32 Return to Fullscreen'
-    btn.style.cssText = 'padding:14px 32px;background:#2563eb;color:white;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer'
+    btn.style.cssText = 'padding:16px 40px;background:#2563eb;color:white;border:none;border-radius:10px;font-size:17px;font-weight:700;cursor:pointer'
+    btn.textContent = isRefresh ? '\uD83D\uDD32 Continue Exam in Fullscreen' : '\uD83D\uDD32 Return to Fullscreen'
 
     overlay.appendChild(icon)
     overlay.appendChild(title)
@@ -68,47 +67,83 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     overlay.appendChild(btn)
     document.body.appendChild(overlay)
 
+    // Button click — user gesture required by Chrome
     btn.addEventListener('click', () => {
-      document.documentElement.requestFullscreen?.().catch(() => {})
+      document.documentElement.requestFullscreen?.()
+        .then(() => {
+          document.getElementById('cdc-fs-overlay')?.remove()
+        })
+        .catch(() => {
+          // If fullscreen still fails, just remove overlay and continue
+          document.getElementById('cdc-fs-overlay')?.remove()
+        })
     })
+  }, [])
+
+  const start = useCallback(() => {
+    // Clean up any previous listeners first (important on refresh/re-start)
+    listenersRef.current.forEach(([ev, fn, t]) => t.removeEventListener(ev, fn))
+    windowListenersRef.current.forEach(([ev, fn]) => window.removeEventListener(ev, fn))
+    listenersRef.current       = []
+    windowListenersRef.current = []
+    clearInterval(clearSelInterval.current)
+    clearInterval(devToolsInterval.current)
+
+    // ── 1. FULLSCREEN ────────────────────────────────────────────────────────
+    // Try auto-enter fullscreen
+    // If it fails (e.g. after refresh — no user gesture), show prompt overlay
+    const enterFullscreen = () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.()
+          .catch(() => {
+            // Chrome blocked it — show prompt (user must click)
+            showFullscreenPrompt(true)
+          })
+      }
+    }
+    enterFullscreen()
 
     // Track fullscreen changes
     const onFullscreenChange = () => {
       lastFsChangeTime.current = Date.now()
       if (!document.fullscreenElement) {
-        overlay.style.display = 'flex'
+        // Show overlay + log violation
+        showFullscreenPrompt(false)
         logViolation('fullscreen_exit')
         onViolation('fullscreen_exit')
       } else {
-        overlay.style.display = 'none'
+        // Back in fullscreen — hide any overlay
+        document.getElementById('cdc-fs-overlay')?.remove()
       }
     }
     document.addEventListener('fullscreenchange', onFullscreenChange)
     listenersRef.current.push(['fullscreenchange', onFullscreenChange, document])
 
-    // 2. KEYBOARD SHORTCUTS
+    // ── 2. KEYBOARD SHORTCUTS ────────────────────────────────────────────────
     const blockKeys = (e) => {
       const k = e.key?.toLowerCase()
       if (e.key === 'F12')                                          { e.preventDefault(); return }
       if (e.ctrlKey && e.shiftKey && ['i','j','c','k'].includes(k)) { e.preventDefault(); return }
       if (e.ctrlKey && ['u','p','s','c','v','x','a'].includes(k))   { e.preventDefault(); return }
+      // Block Escape key (exits fullscreen)
+      if (e.key === 'Escape') { e.preventDefault(); return }
     }
     document.addEventListener('keydown', blockKeys)
     listenersRef.current.push(['keydown', blockKeys, document])
 
-    // 3. RIGHT CLICK
+    // ── 3. RIGHT CLICK ───────────────────────────────────────────────────────
     const blockRight = (e) => e.preventDefault()
     document.addEventListener('contextmenu', blockRight)
     listenersRef.current.push(['contextmenu', blockRight, document])
 
-    // 4. CLIPBOARD
+    // ── 4. CLIPBOARD ─────────────────────────────────────────────────────────
     const blockClip = (e) => e.preventDefault()
     ;['copy','paste','cut'].forEach(ev => {
       document.addEventListener(ev, blockClip)
       listenersRef.current.push([ev, blockClip, document])
     })
 
-    // 5. PRINT
+    // ── 5. PRINT ─────────────────────────────────────────────────────────────
     const blockPrint = () => {
       logViolation('print_attempt')
       onViolation('print_attempt')
@@ -116,7 +151,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     window.addEventListener('beforeprint', blockPrint)
     windowListenersRef.current.push(['beforeprint', blockPrint])
 
-    // 6. TEXT SELECTION
+    // ── 6. TEXT SELECTION ────────────────────────────────────────────────────
     document.body.style.userSelect       = 'none'
     document.body.style.webkitUserSelect = 'none'
     document.body.style.mozUserSelect    = 'none'
@@ -129,17 +164,17 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
       document.selection?.empty()
     }, 500)
 
-    // 7. TAB SWITCH
-    // Ignore visibilitychange caused by fullscreen exit (already counted separately)
+    // ── 7. TAB SWITCH ────────────────────────────────────────────────────────
     const onVisibility = () => {
       if (document.hidden) {
+        // Ignore if caused by fullscreen change
         const timeSinceFsChange = Date.now() - lastFsChangeTime.current
         if (timeSinceFsChange < 2000) return
         clearTimeout(visGraceTimer.current)
         visGraceTimer.current = setTimeout(() => {
           logViolation('tab_switch')
           onViolation('tab_switch')
-        }, 1000)
+        }, 1000) // 1 second grace
       } else {
         clearTimeout(visGraceTimer.current)
       }
@@ -147,7 +182,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     document.addEventListener('visibilitychange', onVisibility)
     listenersRef.current.push(['visibilitychange', onVisibility, document])
 
-    // 8. WINDOW BLUR — log + call onViolation (counts in blur bucket)
+    // ── 8. WINDOW BLUR ───────────────────────────────────────────────────────
     const onBlur = () => {
       focusLossCount.current++
       logViolation('window_blur', { count: focusLossCount.current })
@@ -156,7 +191,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     window.addEventListener('blur', onBlur)
     windowListenersRef.current.push(['blur', onBlur])
 
-    // 9. SPLIT SCREEN / RESIZE
+    // ── 9. SPLIT SCREEN / RESIZE ─────────────────────────────────────────────
     const origH = window.screen.height
     const origW = window.screen.width
     const onResize = () => {
@@ -170,7 +205,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     window.addEventListener('resize', onResize)
     windowListenersRef.current.push(['resize', onResize])
 
-    // 10. DEVTOOLS DETECTION
+    // ── 10. DEVTOOLS DETECTION ───────────────────────────────────────────────
     let devOpen = false
     devToolsInterval.current = setInterval(() => {
       const wDiff = window.outerWidth  - window.innerWidth  > 160
@@ -184,7 +219,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
       }
     }, 2000)
 
-    // 11. MULTIPLE MONITORS
+    // ── 11. MULTIPLE MONITORS ────────────────────────────────────────────────
     try {
       if (window.screen.isExtended) {
         logViolation('multiple_monitors')
@@ -192,7 +227,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
       }
     } catch {}
 
-    // 12. IDLE DETECTION
+    // ── 12. IDLE DETECTION ───────────────────────────────────────────────────
     const resetIdle = () => {
       clearTimeout(idleTimer.current)
       idleTimer.current = setTimeout(() => {
@@ -206,7 +241,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
       windowListenersRef.current.push([ev, resetIdle])
     })
 
-  }, [tokenRef, onViolation, logViolation])
+  }, [tokenRef, onViolation, logViolation, showFullscreenPrompt])
 
   const stop = useCallback(() => {
     listenersRef.current.forEach(([ev, fn, t]) => t.removeEventListener(ev, fn))
