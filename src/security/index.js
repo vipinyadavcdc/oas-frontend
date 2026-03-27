@@ -34,7 +34,9 @@ const COUNTED_VIOLATIONS = new Set([
   'screen_mirror_or_split', 'devtools_open', 'possible_screenshot'
 ])
 
-export function useSecurity({ tokenRef, onAutoSubmit }) {
+export function useSecurity({ tokenRef, autoSubmitRef }) {
+  // autoSubmitRef.current always points to the latest handleAutoSubmit
+  // This avoids stale closure bugs when onAutoSubmit was passed as a value
   const [warningMsg, setWarningMsg]           = useState('')
   const [showGuidedAccess, setShowGuidedAccess] = useState(false)
   const violationCount = useRef(0)
@@ -58,12 +60,12 @@ export function useSecurity({ tokenRef, onAutoSubmit }) {
       showWarn(`${msg} (${violationCount.current}/${MAX_VIOLATIONS})`)
       if (violationCount.current >= MAX_VIOLATIONS) {
         showWarn('🚨 Too many violations! Submitting your exam...')
-        setTimeout(() => onAutoSubmit('violation_limit'), 2500)
+        setTimeout(() => autoSubmitRef.current?.('violation_limit'), 2500)
       }
     } else {
       showWarn(msg)
     }
-  }, [showWarn, onAutoSubmit])
+  }, [showWarn, autoSubmitRef])
 
   // Pass tokenRef (not token value) to each hook
   const args    = { tokenRef, onViolation: handleViolation }
