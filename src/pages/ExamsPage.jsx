@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Activity, BarChart2, Copy, Send, Clock, Users, Trash2, Edit, StopCircle, EyeOff, Timer } from 'lucide-react'
+import { Plus, Search, Activity, BarChart2, Copy, Send, Clock, Users, Trash2, Edit, StopCircle, EyeOff, Eye, Timer, KeyRound } from 'lucide-react'
 import api from '../utils/api'
 import toast from 'react-hot-toast'
 import { formatDistanceToNow } from 'date-fns'
@@ -21,6 +21,7 @@ export default function ExamsPage() {
   const [extendModal, setExtendModal] = useState(null) // exam to extend
   const [extendMins, setExtendMins] = useState(10)
   const [extending, setExtending] = useState(false)
+  const [shownMasterCodes, setShownMasterCodes] = useState({})
 
   useEffect(() => { loadExams() }, [statusFilter])
 
@@ -156,7 +157,27 @@ export default function ExamsPage() {
                     <span className="badge badge-gray">{exam.university}</span>
                   </div>
                   <div className="flex flex-wrap gap-4 text-sm mt-2" style={{ color: 'var(--color-text-muted)' }}>
+                    {/* Room Code */}
                     <span className="font-mono font-bold" style={{ color: 'var(--color-primary)' }}>🔑 {exam.room_code}</span>
+                    <button onClick={() => { navigator.clipboard.writeText(exam.room_code); toast.success('Room code copied!') }}
+                      className="btn-secondary" style={{ fontSize:10, padding:'1px 6px' }}>Copy</button>
+                    {/* Master Code — hidden by default */}
+                    <span style={{ display:'flex', alignItems:'center', gap:4, marginLeft:4 }}>
+                      <KeyRound size={12} style={{ color:'var(--color-warning)' }} />
+                      <span style={{ fontSize:12, color:'var(--color-warning)', fontWeight:700 }}>Master:</span>
+                      <span className="font-mono font-bold" style={{ color:'var(--color-warning)', letterSpacing:2, minWidth:50 }}>
+                        {shownMasterCodes[exam.id] ? (exam.master_room_code || '—') : '•••••'}
+                      </span>
+                      <button
+                        onClick={() => setShownMasterCodes(prev => ({ ...prev, [exam.id]: !prev[exam.id] }))}
+                        style={{ background:'none', border:'none', cursor:'pointer', padding:2, color:'var(--color-text-muted)' }}>
+                        {shownMasterCodes[exam.id] ? <EyeOff size={12}/> : <Eye size={12}/>}
+                      </button>
+                      {shownMasterCodes[exam.id] && exam.master_room_code && (
+                        <button onClick={() => { navigator.clipboard.writeText(exam.master_room_code); toast.success('Master code copied!') }}
+                          className="btn-secondary" style={{ fontSize:10, padding:'1px 6px' }}>Copy</button>
+                      )}
+                    </span>
                     <span className="flex items-center gap-1"><Clock size={14} /> {exam.duration_minutes} min</span>
                     <span>📝 {exam.total_questions} questions</span>
                     <span className="flex items-center gap-1"><Users size={14} /> {exam.student_count || 0} students</span>
