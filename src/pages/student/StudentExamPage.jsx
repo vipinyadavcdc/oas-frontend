@@ -100,83 +100,68 @@ export default function StudentExamPage() {
       answersRef.current = restored
     }
 
-    const aptTimeSec = (data.exam.aptitude_time_minutes || 0) * 60
-    const verTimeSec = (data.exam.verbal_time_minutes   || 0) * 60
+    const aptTimeSec  = (data.exam.aptitude_time_minutes || 0) * 60
+    const verTimeSec  = (data.exam.verbal_time_minutes   || 0) * 60
     const hasSections = aptTimeSec > 0 && verTimeSec > 0
+    const sess        = data.session
 
-    // ── RESUME LOGIC ──────────────────────────────────────────────────────
-    // If student refreshed mid-exam, restore their section + remaining time
-    if (data.resumed && data.session) {
-      const sess = data.session
+    // ── RESTORE STATE — works for BOTH fresh load AND page refresh ────────
+    // Key insight: sessionStorage always has the session row from DB.
+    // That row contains current_section, aptitude_started_at etc.
+    // So we NEVER need data.resumed — just read the session fields directly.
 
-      // Which sections are already submitted?
-      const aptDone = !!sess.aptitude_submitted_at
-      const verDone = !!sess.verbal_submitted_at
-      setSectionDone({ aptitude_reasoning: aptDone, verbal: verDone })
+    // Mark already-submitted sections
+    const aptDone = !!sess.aptitude_submitted_at
+    const verDone = !!sess.verbal_submitted_at
+    setSectionDone({ aptitude_reasoning: aptDone, verbal: verDone })
 
-      if (hasSections && sess.current_section) {
-        // Restore active section
-        const section = sess.current_section
+    if (hasSections) {
+      if (sess.current_section) {
+        // Student already picked a section — restore it with correct remaining time
+        const section         = sess.current_section
         setActiveSection(section)
         activeSectionRef.current = section
 
-        // Calculate remaining time for current section
         const sectionTotalSec = section === 'aptitude_reasoning' ? aptTimeSec : verTimeSec
-        const startedAt = section === 'aptitude_reasoning'
+        const startedAt       = section === 'aptitude_reasoning'
           ? sess.aptitude_started_at
           : sess.verbal_started_at
 
         if (startedAt) {
-          const elapsed    = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
-          const remaining  = Math.max(0, sectionTotalSec - elapsed)
+          const elapsed   = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+          const remaining = Math.max(0, sectionTotalSec - elapsed)
           setTimeLeft(remaining)
         } else {
           setTimeLeft(sectionTotalSec)
         }
 
-        // Start security — section is already active on resume
-        if (!securityStarted.current) {
-          securityStarted.current = true
-          startSecurity()
-        }
-
-      } else if (!hasSections) {
-        // No sections — restore remaining time from exam end_time or duration
-        const fullDuration = data.exam.duration_minutes * 60
-        if (data.exam.end_time) {
-          const secsLeft = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
-          setTimeLeft(Math.min(fullDuration, Math.max(0, secsLeft)))
-        } else if (sess.started_at) {
-          const elapsed   = Math.floor((Date.now() - new Date(sess.started_at).getTime()) / 1000)
-          const remaining = Math.max(0, fullDuration - elapsed)
-          setTimeLeft(remaining)
-        } else {
-          setTimeLeft(fullDuration)
-        }
         if (!securityStarted.current) {
           securityStarted.current = true
           startSecurity()
         }
       }
-      // If resumed with sections but no current_section = they hadn't picked yet
-      // → fall through to section selection screen (correct behaviour)
+      // current_section is null → student hasn't picked yet → show section screen ✓
 
     } else {
-      // ── FRESH START ──────────────────────────────────────────────────────
-      if (!hasSections) {
-        const fullDuration = data.exam.duration_minutes * 60
-        if (data.exam.end_time) {
-          const secsLeft = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
-          setTimeLeft(Math.min(fullDuration, Math.max(0, secsLeft)))
-        } else {
-          setTimeLeft(fullDuration)
-        }
-        if (!securityStarted.current) {
-          securityStarted.current = true
-          startSecurity()
-        }
+      // No sections — single timer exam
+      const fullDuration = data.exam.duration_minutes * 60
+
+      if (data.exam.end_time) {
+        const secsLeft = Math.floor((new Date(data.exam.end_time) - new Date()) / 1000)
+        setTimeLeft(Math.min(fullDuration, Math.max(0, secsLeft)))
+      } else if (sess.started_at) {
+        // Correctly calculate remaining time even after refresh
+        const elapsed   = Math.floor((Date.now() - new Date(sess.started_at).getTime()) / 1000)
+        const remaining = Math.max(0, fullDuration - elapsed)
+        setTimeLeft(remaining)
+      } else {
+        setTimeLeft(fullDuration)
       }
-      // With sections → wait for student to pick section before starting security
+
+      if (!securityStarted.current) {
+        securityStarted.current = true
+        startSecurity()
+      }
     }
 
     startHeartbeat()
@@ -259,6 +244,16 @@ export default function StudentExamPage() {
 
     try {
       await api.post('/exam/start-section', { session_token: tokenRef.current, section })
+      // Update sessionStorage so refresh restores correct section + start time
+      const startedAt = new Date().toISOString()
+      const stored    = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+      const col       = section === 'aptitude_reasoning' ? 'aptitude_started_at' : 'verbal_started_at'
+      stored.session  = {
+        ...stored.session,
+        current_section: section,
+        [col]: startedAt,
+      }
+      sessionStorage.setItem('cdc_session', JSON.stringify(stored))
     } catch {}
   }
 
@@ -289,6 +284,20 @@ export default function StudentExamPage() {
       activeSectionRef.current = next
       setCurrentIdx(0)
       setTimeLeft(nextTime)
+
+      // Update sessionStorage — mark cur section submitted, record next section start
+      const now     = new Date().toISOString()
+      const stored2 = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+      const subCol  = cur === 'aptitude_reasoning' ? 'aptitude_submitted_at' : 'verbal_submitted_at'
+      const startCol = next === 'aptitude_reasoning' ? 'aptitude_started_at' : 'verbal_started_at'
+      stored2.session = {
+        ...stored2.session,
+        [subCol]:        now,
+        current_section: next,
+        [startCol]:      now,
+      }
+      sessionStorage.setItem('cdc_session', JSON.stringify(stored2))
+
       toast.success(`Section submitted! Now: ${next === 'verbal' ? 'Verbal' : 'Aptitude & Reasoning'}`)
     } catch {
       toast.error('Failed to submit section')
