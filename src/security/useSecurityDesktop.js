@@ -1,6 +1,5 @@
-// CDC OAS — Desktop Security Hook v3.1
-// Fix: uses tokenRef (object) so logViolation always reads the latest token
-// even if security starts before token is set
+// CDC OAS — Desktop Security Hook v3.2
+// Fixes: fullscreen overlay, violation counter, tab switch dedup
 
 import { useRef, useCallback } from 'react'
 import api from '../utils/api'
@@ -13,9 +12,9 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
   const devToolsInterval   = useRef(null)
   const idleTimer          = useRef(null)
   const focusLossCount     = useRef(0)
-  const IDLE_TIMEOUT_MS    = 120000 // 2 min
+  const lastFsChangeTime   = useRef(0)
+  const IDLE_TIMEOUT_MS    = 120000
 
-  // Always reads tokenRef.current — never stale
   const logViolation = useCallback(async (type, details = {}) => {
     const token = tokenRef.current
     if (!token) return
@@ -30,87 +29,62 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
 
   const start = useCallback(() => {
 
-    // 1. FULLSCREEN
-    // Enter fullscreen on start
+    // 1. FULLSCREEN - enter on start
     try {
       document.documentElement.requestFullscreen?.().catch(() => {})
     } catch {}
 
-    // Track whether we're in fullscreen
-    let isInFullscreen = true
+    // Blocking overlay shown when student exits fullscreen
+    // Chrome needs user gesture for requestFullscreen, so we use a button
+    const overlay = document.createElement('div')
+    overlay.id = 'cdc-fs-overlay'
+    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.93);color:white;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:sans-serif'
 
+    const icon = document.createElement('div')
+    icon.textContent = '\u26A0\uFE0F'
+    icon.style.cssText = 'font-size:52px;margin-bottom:16px'
+
+    const title = document.createElement('h2')
+    title.textContent = 'Fullscreen Required'
+    title.style.cssText = 'font-size:22px;font-weight:700;margin-bottom:12px;color:#f87171;margin-top:0'
+
+    const msg1 = document.createElement('p')
+    msg1.textContent = 'You have exited fullscreen mode. This violation has been recorded.'
+    msg1.style.cssText = 'font-size:15px;color:#d1d5db;margin-bottom:8px;line-height:1.6'
+
+    const msg2 = document.createElement('p')
+    msg2.textContent = 'You must return to fullscreen to continue your exam.'
+    msg2.style.cssText = 'font-size:13px;color:#9ca3af;margin-bottom:28px'
+
+    const btn = document.createElement('button')
+    btn.id = 'cdc-fs-btn'
+    btn.textContent = '\uD83D\uDD32 Return to Fullscreen'
+    btn.style.cssText = 'padding:14px 32px;background:#2563eb;color:white;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer'
+
+    overlay.appendChild(icon)
+    overlay.appendChild(title)
+    overlay.appendChild(msg1)
+    overlay.appendChild(msg2)
+    overlay.appendChild(btn)
+    document.body.appendChild(overlay)
+
+    btn.addEventListener('click', () => {
+      document.documentElement.requestFullscreen?.().catch(() => {})
+    })
+
+    // Track fullscreen changes
     const onFullscreenChange = () => {
-      const nowFullscreen = !!document.fullscreenElement
-      if (!nowFullscreen && isInFullscreen) {
-        // Student exited fullscreen — count as violation
-        isInFullscreen = false
+      lastFsChangeTime.current = Date.now()
+      if (!document.fullscreenElement) {
+        overlay.style.display = 'flex'
         logViolation('fullscreen_exit')
         onViolation('fullscreen_exit')
-      } else if (nowFullscreen) {
-        isInFullscreen = true
+      } else {
+        overlay.style.display = 'none'
       }
     }
     document.addEventListener('fullscreenchange', onFullscreenChange)
     listenersRef.current.push(['fullscreenchange', onFullscreenChange, document])
-
-    // Show overlay + button to re-enter fullscreen when student exits
-    // Chrome blocks programmatic fullscreen unless triggered by user gesture
-    // So we show a blocking overlay with a button instead
-    const fsOverlay = document.createElement('div')
-    fsOverlay.id = 'cdc-fs-overlay'
-    fsOverlay.style.cssText = `
-      display: none;
-      position: fixed;
-      inset: 0;
-      z-index: 99999;
-      background: rgba(0,0,0,0.92);
-      color: white;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 40px;
-      font-family: sans-serif;
-    `
-    fsOverlay.innerHTML = \`
-      <div style="font-size:48px;margin-bottom:16px">⚠️</div>
-      <h2 style="font-size:22px;font-weight:700;margin-bottom:12px;color:#f87171">Fullscreen Required</h2>
-      <p style="font-size:15px;color:#d1d5db;margin-bottom:8px;line-height:1.6">
-        You have exited fullscreen mode.<br/>This is a violation and has been recorded.
-      </p>
-      <p style="font-size:13px;color:#9ca3af;margin-bottom:28px">
-        You must return to fullscreen to continue your exam.
-      </p>
-      <button id="cdc-fs-btn" style="
-        padding: 14px 32px;
-        background: #2563eb;
-        color: white;
-        border: none;
-        border-radius: 10px;
-        font-size: 16px;
-        font-weight: 700;
-        cursor: pointer;
-      ">🔲 Return to Fullscreen</button>
-    \`
-    document.body.appendChild(fsOverlay)
-
-    // Show overlay when fullscreen exits
-    document.addEventListener('fullscreenchange', () => {
-      const overlay = document.getElementById('cdc-fs-overlay')
-      if (!overlay) return
-      if (!document.fullscreenElement) {
-        overlay.style.display = 'flex'
-      } else {
-        overlay.style.display = 'none'
-      }
-    })
-
-    // Button click → re-enter fullscreen
-    document.addEventListener('click', (e) => {
-      if (e.target?.id === 'cdc-fs-btn') {
-        document.documentElement.requestFullscreen?.().catch(() => {})
-      }
-    })
 
     // 2. KEYBOARD SHORTCUTS
     const blockKeys = (e) => {
@@ -155,21 +129,12 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
       document.selection?.empty()
     }, 500)
 
-    // 7. TAB SWITCH — visibilitychange with 1.5s grace
-    // Note: fullscreen exit can trigger visibilitychange on some browsers
-    // We ignore visibility events if they happen within 2s of a fullscreen change
-    let lastFsChangeTime = 0
-    document.addEventListener('fullscreenchange', () => {
-      lastFsChangeTime = Date.now()
-    })
-
+    // 7. TAB SWITCH
+    // Ignore visibilitychange caused by fullscreen exit (already counted separately)
     const onVisibility = () => {
       if (document.hidden) {
-        // If this visibility change happened right after a fullscreen change, skip it
-        // (fullscreen_exit violation already counts separately)
-        const timeSinceFsChange = Date.now() - lastFsChangeTime
+        const timeSinceFsChange = Date.now() - lastFsChangeTime.current
         if (timeSinceFsChange < 2000) return
-
         clearTimeout(visGraceTimer.current)
         visGraceTimer.current = setTimeout(() => {
           logViolation('tab_switch')
@@ -255,9 +220,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     document.body.style.webkitUserSelect = ''
     document.body.style.mozUserSelect    = ''
     document.body.style.msUserSelect     = ''
-    // Clean up fullscreen overlay
     document.getElementById('cdc-fs-overlay')?.remove()
-    // Exit fullscreen if still in it
     try { if (document.fullscreenElement) document.exitFullscreen?.() } catch {}
   }, [])
 
