@@ -92,5 +92,6 @@ export function useSecurity({ tokenRef, autoSubmitRef }) {
     warningMsg,
     showGuidedAccess,
     platform: PLATFORM,
+    violationCount,  // exposed so StudentExamPage can reset on resume
   }
 }
