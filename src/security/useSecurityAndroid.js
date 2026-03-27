@@ -1,43 +1,38 @@
-// CDC OAS — Android Security Hook v3.1 (FIXED)
-// Fix: sessionToken read as ref object (sessionToken.current) at call time
-// For: Android Chrome / WebView
+// CDC OAS — Android Security Hook v3.1
+// Fix: uses tokenRef so logViolation always reads latest token
 
 import { useRef, useCallback } from 'react'
 import api from '../utils/api'
 
-export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) {
+export function useSecurityAndroid({ tokenRef, onViolation }) {
   const listenersRef       = useRef([])
   const windowListenersRef = useRef([])
   const clearSelInterval   = useRef(null)
   const visGraceTimer      = useRef(null)
   const appSwitchCount     = useRef(0)
 
-  // ── KEY FIX: always read sessionToken.current at call time ──────────────────
   const logViolation = useCallback(async (type, details = {}) => {
+    const token = tokenRef.current
+    if (!token) return
     try {
-      const token = typeof sessionToken === 'object' ? sessionToken.current : sessionToken
-      if (!token) return
       await api.post('/exam/violation', {
-        session_token: token,
+        session_token:  token,
         violation_type: type,
         details: { ...details, platform: 'android' }
       })
     } catch {}
-  }, [sessionToken])
+  }, [tokenRef])
 
   const start = useCallback(() => {
 
-    // ── 1. FULLSCREEN ──────────────────────────────────────────────────────────
+    // 1. FULLSCREEN
     try {
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {})
-      } else if (document.documentElement.webkitRequestFullscreen) {
-        document.documentElement.webkitRequestFullscreen()
-      }
+      document.documentElement.requestFullscreen?.().catch(() => {})
+      document.documentElement.webkitRequestFullscreen?.()
     } catch {}
 
-    // ── 2. APP SWITCH / TAB SWITCH DETECTION ──────────────────────────────────
-    const handleVisibility = () => {
+    // 2. APP SWITCH (visibilitychange + pagehide)
+    const onVisibility = () => {
       if (document.hidden) {
         clearTimeout(visGraceTimer.current)
         visGraceTimer.current = setTimeout(() => {
@@ -49,85 +44,76 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
         clearTimeout(visGraceTimer.current)
       }
     }
-    document.addEventListener('visibilitychange', handleVisibility)
-    listenersRef.current.push(['visibilitychange', handleVisibility, document])
+    document.addEventListener('visibilitychange', onVisibility)
+    listenersRef.current.push(['visibilitychange', onVisibility, document])
 
-    const handlePageHide = () => {
+    const onPageHide = () => {
       appSwitchCount.current++
       logViolation('app_switch', { trigger: 'pagehide', count: appSwitchCount.current })
-      onViolation('app_switch')
     }
-    window.addEventListener('pagehide', handlePageHide)
-    windowListenersRef.current.push(['pagehide', handlePageHide])
+    window.addEventListener('pagehide', onPageHide)
+    windowListenersRef.current.push(['pagehide', onPageHide])
 
-    // ── 3. CIRCLE TO SEARCH / SPLIT SCREEN ────────────────────────────────────
-    const origHeight = window.innerHeight
-    const origWidth  = window.innerWidth
-    const handleResize = () => {
-      const hRatio = window.innerHeight / origHeight
-      const wRatio = window.innerWidth  / origWidth
-      if (hRatio < 0.75 || wRatio < 0.75) {
-        logViolation('split_screen_or_ai', { hRatio: hRatio.toFixed(2), wRatio: wRatio.toFixed(2) })
-        onViolation('split_screen_or_ai')
+    // 3. CIRCLE TO SEARCH / SPLIT SCREEN (resize)
+    const origH = window.innerHeight
+    const origW = window.innerWidth
+    const onResize = () => {
+      const hR = window.innerHeight / origH
+      const wR = window.innerWidth  / origW
+      if (hR < 0.75 || wR < 0.75) {
+        logViolation('split_screen_or_ai', { hR: hR.toFixed(2), wR: wR.toFixed(2) })
+        onViolation('split_screen')
       }
     }
-    window.addEventListener('resize', handleResize)
-    windowListenersRef.current.push(['resize', handleResize])
+    window.addEventListener('resize', onResize)
+    windowListenersRef.current.push(['resize', onResize])
 
-    // ── 4. CONTEXT MENU / LONG PRESS BLOCK ────────────────────────────────────
-    const blockContextMenu = (e) => e.preventDefault()
-    document.addEventListener('contextmenu', blockContextMenu)
-    listenersRef.current.push(['contextmenu', blockContextMenu, document])
+    // 4. CONTEXT MENU / LONG PRESS
+    const blockCtx = (e) => e.preventDefault()
+    document.addEventListener('contextmenu', blockCtx)
+    listenersRef.current.push(['contextmenu', blockCtx, document])
 
-    // ── 5. TEXT SELECTION BLOCK ────────────────────────────────────────────────
-    const blockSelect = (e) => e.preventDefault()
-    document.addEventListener('selectstart', blockSelect)
-    listenersRef.current.push(['selectstart', blockSelect, document])
-
-    document.addEventListener('touchstart', (e) => {
-      if (e.touches.length > 1) e.preventDefault()
-    }, { passive: false })
-
-    document.addEventListener('touchend', () => {
-      if (window.getSelection) window.getSelection().removeAllRanges()
-    }, { passive: false })
-
-    document.addEventListener('touchmove', () => {
-      if (window.getSelection) window.getSelection().removeAllRanges()
-    }, { passive: true })
-
-    clearSelInterval.current = setInterval(() => {
-      if (window.getSelection) window.getSelection().removeAllRanges()
-      if (document.selection)  document.selection.empty()
-    }, 300)
-
-    // ── 6. TEXT SELECTION CSS BLOCK ────────────────────────────────────────────
+    // 5. TEXT SELECTION
+    const blockSel = (e) => e.preventDefault()
+    document.addEventListener('selectstart', blockSel)
+    listenersRef.current.push(['selectstart', blockSel, document])
     document.body.style.userSelect          = 'none'
     document.body.style.webkitUserSelect    = 'none'
     document.body.style.webkitTouchCallout  = 'none'
 
-    // ── 7. BACK BUTTON BLOCK ──────────────────────────────────────────────────
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 1) e.preventDefault()
+    }, { passive: false })
+    document.addEventListener('touchend', () => {
+      window.getSelection?.().removeAllRanges()
+    }, { passive: false })
+    document.addEventListener('touchmove', () => {
+      window.getSelection?.().removeAllRanges()
+    }, { passive: true })
+
+    clearSelInterval.current = setInterval(() => {
+      window.getSelection?.().removeAllRanges()
+      document.selection?.empty()
+    }, 300)
+
+    // 6. CLIPBOARD
+    const blockClip = (e) => e.preventDefault()
+    ;['copy','paste','cut'].forEach(ev => {
+      document.addEventListener(ev, blockClip)
+      listenersRef.current.push([ev, blockClip, document])
+    })
+
+    // 7. BACK BUTTON
     history.pushState(null, '', location.href)
-    const handlePopState = () => {
+    const onPopState = () => {
       history.pushState(null, '', location.href)
       logViolation('back_button_press')
       onViolation('back_button')
     }
-    window.addEventListener('popstate', handlePopState)
-    windowListenersRef.current.push(['popstate', handlePopState])
+    window.addEventListener('popstate', onPopState)
+    windowListenersRef.current.push(['popstate', onPopState])
 
-    // ── 8. COPY / PASTE / CUT BLOCK ───────────────────────────────────────────
-    const blockClipboard = (e) => e.preventDefault()
-    document.addEventListener('copy',  blockClipboard)
-    document.addEventListener('paste', blockClipboard)
-    document.addEventListener('cut',   blockClipboard)
-    listenersRef.current.push(
-      ['copy',  blockClipboard, document],
-      ['paste', blockClipboard, document],
-      ['cut',   blockClipboard, document]
-    )
-
-    // ── 9. KEYBOARD SHORTCUT BLOCK ─────────────────────────────────────────────
+    // 8. KEYBOARD SHORTCUTS
     const blockKeys = (e) => {
       const k = e.key?.toLowerCase()
       if (e.ctrlKey && ['c','v','x','a','p','s'].includes(k)) e.preventDefault()
@@ -136,24 +122,20 @@ export function useSecurityAndroid({ sessionToken, onViolation, onAutoSubmit }) 
     document.addEventListener('keydown', blockKeys)
     listenersRef.current.push(['keydown', blockKeys, document])
 
-    // ── 10. TOUCH OUTSIDE TOP AREA BLOCK ──────────────────────────────────────
+    // 9. BLOCK TOP-EDGE TOUCH (notification bar)
     const blockTopTouch = (e) => {
       if (e.touches[0]?.clientY < 20) e.preventDefault()
     }
     document.addEventListener('touchstart', blockTopTouch, { passive: false })
     listenersRef.current.push(['touchstart', blockTopTouch, document])
 
-    // ── 11. ORIENTATION LOCK ───────────────────────────────────────────────────
-    try {
-      if (screen.orientation?.lock) {
-        screen.orientation.lock('portrait').catch(() => {})
-      }
-    } catch {}
+    // 10. ORIENTATION LOCK
+    try { screen.orientation?.lock('portrait').catch(() => {}) } catch {}
 
-  }, [sessionToken, onViolation, logViolation])
+  }, [tokenRef, onViolation, logViolation])
 
   const stop = useCallback(() => {
-    listenersRef.current.forEach(([ev, fn, target]) => target.removeEventListener(ev, fn))
+    listenersRef.current.forEach(([ev, fn, t]) => t.removeEventListener(ev, fn))
     windowListenersRef.current.forEach(([ev, fn]) => window.removeEventListener(ev, fn))
     listenersRef.current       = []
     windowListenersRef.current = []

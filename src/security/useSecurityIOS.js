@@ -1,12 +1,11 @@
-// CDC OAS — iOS Security Hook v3.1 (FIXED)
-// Fix: sessionToken read as ref object (sessionToken.current) at call time
-// For: iPhone / iPad Safari / Chrome on iOS
-// NOTE: iOS does NOT support Fullscreen API — never call requestFullscreen here
+// CDC OAS — iOS Security Hook v3.1
+// Fix: uses tokenRef so logViolation always reads latest token
+// NO fullscreen API — never causes white screen on iOS
 
 import { useRef, useCallback } from 'react'
 import api from '../utils/api'
 
-export function useSecurityIOS({ sessionToken, onViolation, onAutoSubmit }) {
+export function useSecurityIOS({ tokenRef, onViolation }) {
   const listenersRef       = useRef([])
   const windowListenersRef = useRef([])
   const clearSelInterval   = useRef(null)
@@ -14,28 +13,29 @@ export function useSecurityIOS({ sessionToken, onViolation, onAutoSubmit }) {
   const appSwitchCount     = useRef(0)
   const origHeight         = useRef(window.innerHeight)
   const origWidth          = useRef(window.innerWidth)
-  const screenshotCheckRef = useRef(null)
+  const screenshotInterval = useRef(null)
 
-  // ── KEY FIX: always read sessionToken.current at call time ──────────────────
   const logViolation = useCallback(async (type, details = {}) => {
+    const token = tokenRef.current
+    if (!token) return
     try {
-      const token = typeof sessionToken === 'object' ? sessionToken.current : sessionToken
-      if (!token) return
       await api.post('/exam/violation', {
-        session_token: token,
+        session_token:  token,
         violation_type: type,
         details: { ...details, platform: 'ios' }
       })
     } catch {}
-  }, [sessionToken])
+  }, [tokenRef])
 
   const start = useCallback(() => {
-    // Lock viewport — no fullscreen on iOS
+    // NO requestFullscreen on iOS — causes white screen / crash
+
+    // Lock scroll instead
     document.body.style.overflow              = 'hidden'
     document.documentElement.style.overflow   = 'hidden'
 
-    // ── 1. APP SWITCH / HOME BUTTON ────────────────────────────────────────────
-    const handleVisibility = () => {
+    // 1. APP SWITCH / HOME BUTTON
+    const onVisibility = () => {
       if (document.hidden) {
         clearTimeout(visGraceTimer.current)
         visGraceTimer.current = setTimeout(() => {
@@ -47,18 +47,18 @@ export function useSecurityIOS({ sessionToken, onViolation, onAutoSubmit }) {
         clearTimeout(visGraceTimer.current)
       }
     }
-    document.addEventListener('visibilitychange', handleVisibility)
-    listenersRef.current.push(['visibilitychange', handleVisibility, document])
+    document.addEventListener('visibilitychange', onVisibility)
+    listenersRef.current.push(['visibilitychange', onVisibility, document])
 
-    const handlePageHide = () => {
+    const onPageHide = () => {
       appSwitchCount.current++
       logViolation('app_switch', { trigger: 'pagehide', count: appSwitchCount.current })
     }
-    window.addEventListener('pagehide', handlePageHide)
-    windowListenersRef.current.push(['pagehide', handlePageHide])
+    window.addEventListener('pagehide', onPageHide)
+    windowListenersRef.current.push(['pagehide', onPageHide])
 
-    // ── 2. SCREENSHOT DETECTION ────────────────────────────────────────────────
-    screenshotCheckRef.current = setInterval(() => {
+    // 2. SCREENSHOT DETECTION (brief resize on some iOS versions)
+    screenshotInterval.current = setInterval(() => {
       const hDiff = Math.abs(window.innerHeight - origHeight.current)
       const wDiff = Math.abs(window.innerWidth  - origWidth.current)
       if (hDiff > 0 && hDiff < 10 && wDiff === 0) {
@@ -67,91 +67,86 @@ export function useSecurityIOS({ sessionToken, onViolation, onAutoSubmit }) {
       }
     }, 200)
 
-    // ── 3. AIRPLAY / SCREEN MIRROR DETECTION ──────────────────────────────────
-    const handleResize = () => {
-      const hRatio = window.innerHeight / origHeight.current
-      const wRatio = window.innerWidth  / origWidth.current
-      if (hRatio < 0.75 || wRatio < 0.75) {
-        logViolation('screen_mirror_or_split', { hRatio: hRatio.toFixed(2), wRatio: wRatio.toFixed(2) })
-        onViolation('screen_mirror_or_split')
+    // 3. AIRPLAY / SCREEN MIRROR / SPLIT VIEW
+    const onResize = () => {
+      const hR = window.innerHeight / origHeight.current
+      const wR = window.innerWidth  / origWidth.current
+      if (hR < 0.75 || wR < 0.75) {
+        logViolation('screen_mirror_or_split', { hR: hR.toFixed(2), wR: wR.toFixed(2) })
+        onViolation('split_screen')
       }
     }
-    window.addEventListener('resize', handleResize)
-    windowListenersRef.current.push(['resize', handleResize])
+    window.addEventListener('resize', onResize)
+    windowListenersRef.current.push(['resize', onResize])
 
-    // ── 4. COPY / PASTE / TEXT SELECTION BLOCK ────────────────────────────────
-    const blockClipboard = (e) => e.preventDefault()
-    document.addEventListener('copy',  blockClipboard)
-    document.addEventListener('paste', blockClipboard)
-    document.addEventListener('cut',   blockClipboard)
-    listenersRef.current.push(
-      ['copy',  blockClipboard, document],
-      ['paste', blockClipboard, document],
-      ['cut',   blockClipboard, document]
-    )
+    // 4. CLIPBOARD
+    const blockClip = (e) => e.preventDefault()
+    ;['copy','paste','cut'].forEach(ev => {
+      document.addEventListener(ev, blockClip)
+      listenersRef.current.push([ev, blockClip, document])
+    })
 
-    const blockSelect = (e) => e.preventDefault()
-    document.addEventListener('selectstart', blockSelect)
-    listenersRef.current.push(['selectstart', blockSelect, document])
-
+    // 5. TEXT SELECTION
     document.body.style.webkitUserSelect   = 'none'
     document.body.style.webkitTouchCallout = 'none'
     document.body.style.userSelect         = 'none'
-
+    const blockSel = (e) => e.preventDefault()
+    document.addEventListener('selectstart', blockSel)
+    listenersRef.current.push(['selectstart', blockSel, document])
     clearSelInterval.current = setInterval(() => {
-      if (window.getSelection) window.getSelection().removeAllRanges()
+      window.getSelection?.().removeAllRanges()
     }, 400)
 
-    // ── 5. CONTEXT MENU BLOCK ─────────────────────────────────────────────────
-    const blockContextMenu = (e) => e.preventDefault()
-    document.addEventListener('contextmenu', blockContextMenu)
-    listenersRef.current.push(['contextmenu', blockContextMenu, document])
+    // 6. CONTEXT MENU
+    const blockCtx = (e) => e.preventDefault()
+    document.addEventListener('contextmenu', blockCtx)
+    listenersRef.current.push(['contextmenu', blockCtx, document])
 
-    // ── 6. ZOOM DISABLE ───────────────────────────────────────────────────────
+    // 7. PINCH ZOOM DISABLE
     document.addEventListener('touchmove', (e) => {
       if (e.touches.length > 1) e.preventDefault()
     }, { passive: false })
 
+    // 8. DOUBLE TAP ZOOM
     let lastTap = 0
-    const preventDoubleTap = (e) => {
+    const noDoubleTap = (e) => {
       const now = Date.now()
       if (now - lastTap < 300) e.preventDefault()
       lastTap = now
     }
-    document.addEventListener('touchend', preventDoubleTap, { passive: false })
-    listenersRef.current.push(['touchend', preventDoubleTap, document])
+    document.addEventListener('touchend', noDoubleTap, { passive: false })
+    listenersRef.current.push(['touchend', noDoubleTap, document])
 
-    // ── 7. BACK SWIPE BLOCK ───────────────────────────────────────────────────
+    // 9. BACK SWIPE
     history.pushState(null, '', location.href)
-    const handlePopState = () => {
+    const onPopState = () => {
       history.pushState(null, '', location.href)
       logViolation('back_swipe_ios')
-      onViolation('back_swipe_ios')
     }
-    window.addEventListener('popstate', handlePopState)
-    windowListenersRef.current.push(['popstate', handlePopState])
+    window.addEventListener('popstate', onPopState)
+    windowListenersRef.current.push(['popstate', onPopState])
 
-    // ── 8. GUIDED ACCESS REMINDER ─────────────────────────────────────────────
+    // 10. GUIDED ACCESS REMINDER (not a violation — just a banner)
     onViolation('guided_access_reminder')
 
-    // ── 9. KEYBOARD SHORTCUTS ─────────────────────────────────────────────────
+    // 11. KEYBOARD META KEYS
     const blockKeys = (e) => {
       const k = e.key?.toLowerCase()
-      if (e.ctrlKey  && ['c','v','x','a','p','s'].includes(k)) e.preventDefault()
-      if (e.metaKey  && ['c','v','x','a','p','s'].includes(k)) e.preventDefault()
+      if (e.ctrlKey && ['c','v','x','a','p','s'].includes(k)) e.preventDefault()
+      if (e.metaKey && ['c','v','x','a','p','s'].includes(k)) e.preventDefault()
     }
     document.addEventListener('keydown', blockKeys)
     listenersRef.current.push(['keydown', blockKeys, document])
 
-  }, [sessionToken, onViolation, logViolation])
+  }, [tokenRef, onViolation, logViolation])
 
   const stop = useCallback(() => {
-    listenersRef.current.forEach(([ev, fn, target]) => target.removeEventListener(ev, fn))
+    listenersRef.current.forEach(([ev, fn, t]) => t.removeEventListener(ev, fn))
     windowListenersRef.current.forEach(([ev, fn]) => window.removeEventListener(ev, fn))
     listenersRef.current       = []
     windowListenersRef.current = []
     clearInterval(clearSelInterval.current)
-    clearInterval(screenshotCheckRef.current)
+    clearInterval(screenshotInterval.current)
     clearTimeout(visGraceTimer.current)
     document.body.style.overflow              = ''
     document.documentElement.style.overflow   = ''
