@@ -8,7 +8,7 @@ import { useSecurityDesktop } from './useSecurityDesktop'
 import { useSecurityAndroid } from './useSecurityAndroid'
 import { useSecurityIOS }     from './useSecurityIOS'
 
-const MAX_VIOLATIONS = 3
+const MAX_VIOLATIONS = 4
 const PLATFORM       = detectPlatform()
 
 const VIOLATION_MESSAGES = {
@@ -31,7 +31,8 @@ const VIOLATION_MESSAGES = {
 // Only these count toward the auto-submit limit
 const COUNTED_VIOLATIONS = new Set([
   'tab_switch', 'app_switch', 'split_screen', 'split_screen_or_ai',
-  'screen_mirror_or_split', 'devtools_open', 'possible_screenshot'
+  'screen_mirror_or_split', 'devtools_open', 'possible_screenshot',
+  'fullscreen_exit'  // exiting fullscreen counts as a violation
 ])
 
 export function useSecurity({ tokenRef, autoSubmitRef }) {
