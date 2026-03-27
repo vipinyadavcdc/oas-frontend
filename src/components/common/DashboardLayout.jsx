@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { LayoutDashboard, FileText, BookOpen, Users, Shield, Settings, LogOut, Menu, X, History } from 'lucide-react'
+import { LayoutDashboard, FileText, BookOpen, Users, Shield, Settings, LogOut, Menu, X, History, BarChart2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import ThemeSwitcher from './ThemeSwitcher'
 
@@ -10,6 +10,7 @@ const navItems = [
   { to: '/questions', icon: BookOpen,         label: 'Question Bank' },
   { to: '/students',  icon: History,       label: 'Student History' },
 ]
+const analysisItem = { to: '/analysis', icon: BarChart2, label: 'Analysis' }
 const adminItems = [
   { to: '/trainers', icon: Users,  label: 'Trainers' },
   { to: '/audit',    icon: Shield, label: 'Audit Log' },
@@ -17,6 +18,7 @@ const adminItems = [
 
 export default function DashboardLayout() {
   const { trainer, logout, isSuperAdmin } = useAuth()
+  const isAnalysisUser = ['EMP001','EMP002'].includes(trainer?.emp_id)
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const handleLogout = () => { logout(); navigate('/login') }
@@ -42,6 +44,14 @@ export default function DashboardLayout() {
             <Icon size={18} /><span>{label}</span>
           </NavLink>
         ))}
+
+        {isAnalysisUser && (
+          <NavLink to="/analysis"
+            className={({ isActive }) => 'sidebar-link ' + (isActive ? 'active' : '')}
+            onClick={() => setSidebarOpen(false)}>
+            <BarChart2 size={18} /><span>Analysis</span>
+          </NavLink>
+        )}
 
         {isSuperAdmin && (
           <>
