@@ -139,7 +139,7 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
         visGraceTimer.current = setTimeout(() => {
           logViolation('tab_switch')
           onViolation('tab_switch')
-        }, 1500)
+        }, 1000)
       } else {
         clearTimeout(visGraceTimer.current)
       }
@@ -147,10 +147,11 @@ export function useSecurityDesktop({ tokenRef, onViolation }) {
     document.addEventListener('visibilitychange', onVisibility)
     listenersRef.current.push(['visibilitychange', onVisibility, document])
 
-    // 8. WINDOW BLUR
+    // 8. WINDOW BLUR — log + call onViolation (counts in blur bucket)
     const onBlur = () => {
       focusLossCount.current++
       logViolation('window_blur', { count: focusLossCount.current })
+      onViolation('window_blur')
     }
     window.addEventListener('blur', onBlur)
     windowListenersRef.current.push(['blur', onBlur])
