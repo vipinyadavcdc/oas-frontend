@@ -41,6 +41,17 @@ export default function StudentExamPage() {
   // Keep answersRef in sync with state
   useEffect(() => { answersRef.current = answers }, [answers])
 
+  // Save current question index to sessionStorage on every navigation
+  // So refresh restores the exact question the student was on
+  useEffect(() => {
+    if (!sessionData) return
+    try {
+      const stored = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+      stored.lastQuestionIdx = currentIdx
+      sessionStorage.setItem('cdc_session', JSON.stringify(stored))
+    } catch {}
+  }, [currentIdx, sessionData])
+
   // ── SECURITY HOOK ─────────────────────────────────────────────────────────
   // Pass tokenRef (object) NOT tokenRef.current (string) — this is the fix!
   const {
@@ -98,6 +109,11 @@ export default function StudentExamPage() {
       })
       setAnswers(restored)
       answersRef.current = restored
+    }
+
+    // Restore last question index — so refresh doesn't jump back to Q1
+    if (data.lastQuestionIdx != null) {
+      setCurrentIdx(data.lastQuestionIdx)
     }
 
     const aptTimeSec  = (data.exam.aptitude_time_minutes || 0) * 60
@@ -376,7 +392,17 @@ export default function StudentExamPage() {
   }
 
   const handleAnswer = async (questionId, option) => {
-    setAnswers(prev => ({ ...prev, [questionId]: option }))
+    const newAnswers = { ...answersRef.current, [questionId]: option }
+    setAnswers(newAnswers)
+    answersRef.current = newAnswers
+    // Keep sessionStorage in sync so refresh restores all answers
+    try {
+      const stored = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+      stored.answers = Object.entries(newAnswers).map(([question_id, selected_option]) => ({
+        question_id, selected_option
+      }))
+      sessionStorage.setItem('cdc_session', JSON.stringify(stored))
+    } catch {}
     try {
       const timeSpent = Math.floor((Date.now() - qStartTime.current) / 1000)
       await api.post('/exam/save-answer', {
@@ -568,8 +594,17 @@ export default function StudentExamPage() {
               <div style={{ display:'flex', justifyContent:'space-between', marginTop:20, gap:8 }}>
                 <button onClick={() => { setCurrentIdx(i => Math.max(0, i-1)); qStartTime.current = Date.now() }}
                   disabled={currentIdx === 0} className="btn-secondary">← Prev</button>
-                <button onClick={() => setAnswers(prev => { const n={...prev}; delete n[currentQ.id]; return n })}
-                  className="btn-secondary" style={{ color:'var(--color-danger)' }}>Clear</button>
+                <button onClick={() => {
+                  const n = { ...answersRef.current }
+                  delete n[currentQ.id]
+                  setAnswers(n)
+                  answersRef.current = n
+                  try {
+                    const stored = JSON.parse(sessionStorage.getItem('cdc_session') || '{}')
+                    stored.answers = Object.entries(n).map(([question_id, selected_option]) => ({ question_id, selected_option }))
+                    sessionStorage.setItem('cdc_session', JSON.stringify(stored))
+                  } catch {}
+                }} className="btn-secondary" style={{ color:'var(--color-danger)' }}>Clear</button>
                 <button onClick={() => { setCurrentIdx(i => Math.min(questions.length-1, i+1)); qStartTime.current = Date.now() }}
                   disabled={currentIdx === questions.length-1} className="btn-secondary">Next →</button>
               </div>
