@@ -53,6 +53,11 @@ export default function StudentExamPage() {
   }, [currentIdx, sessionData])
 
   // ── SECURITY HOOK ─────────────────────────────────────────────────────────
+  // autoSubmitRef — always points to latest handleAutoSubmit, never stale
+  // This is critical: useSecurity is called before handleAutoSubmit is defined,
+  // so we can't pass handleAutoSubmit directly. We use a ref instead.
+  const autoSubmitRef = useRef(null)
+
   // Pass tokenRef (object) NOT tokenRef.current (string) — this is the fix!
   const {
     start: startSecurity,
@@ -62,7 +67,7 @@ export default function StudentExamPage() {
     platform
   } = useSecurity({
     tokenRef,
-    onAutoSubmit: useCallback((reason) => handleAutoSubmit(reason), [])
+    autoSubmitRef,
   })
 
   // ── ANTI-COPY CSS (unconditional — must never be in a conditional) ────────
@@ -345,6 +350,12 @@ export default function StudentExamPage() {
     sessionStorage.removeItem('cdc_session')
     navigate('/exam/done')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Wire handleAutoSubmit into ref so security hooks always call the latest version
+  // This must be AFTER handleAutoSubmit is defined
+  useEffect(() => {
+    autoSubmitRef.current = handleAutoSubmit
+  }, [handleAutoSubmit])
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
   const saveAllAnswers = async () => {
