@@ -441,14 +441,19 @@ export default function UploadExcelTab() {
   }
 
   // ── Generate AI Report ────────────────────────────────────────────────────
-  const generateReport = async () => {
-    if (!parsed || !confirmed) return
+  const generateReport = async (confirmedOverride = false) => {
+    if (!parsed || (!confirmed && !confirmedOverride)) return
+
+    // Set ALL loading states synchronously before any async work
+    setStep(3)
     setAiLoading(true)
     setAiText('')
     setAiChat([])
-    setStep(3)
     setElapsed(0)
     setLoadingMsg(0)
+
+    // Use setTimeout so React renders the loading screen BEFORE we start the API call
+    await new Promise(resolve => setTimeout(resolve, 100))
 
     // Start elapsed timer
     const start = Date.now()
@@ -928,7 +933,7 @@ Confidential — For Internal Use Only`
           </div>
 
           <div style={{ display:'flex', gap:10 }}>
-            <button onClick={() => { setConfirmed(true); generateReport() }}
+            <button onClick={() => { setConfirmed(true); generateReport(true) }}
               style={{ padding:'10px 24px', background:'#16a34a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
               ✨ Confirm & Generate AI Report
             </button>
