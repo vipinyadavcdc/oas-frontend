@@ -442,7 +442,12 @@ export default function UploadExcelTab() {
 
   // ── Generate AI Report ────────────────────────────────────────────────────
   const generateReport = async (confirmedOverride = false) => {
-    if (!parsed || (!confirmed && !confirmedOverride)) return
+    console.log('[GR] called, parsed=', !!parsed, 'confirmed=', confirmed, 'override=', confirmedOverride)
+    if (!parsed || (!confirmed && !confirmedOverride)) {
+      console.log('[GR] EARLY RETURN - parsed:', !!parsed, 'confirmed:', confirmed, 'override:', confirmedOverride)
+      return
+    }
+    console.log('[GR] proceeding...')
 
     // Set ALL loading states synchronously before any async work
     setStep(3)
@@ -939,7 +944,11 @@ Confidential — For Internal Use Only`
           </div>
 
           <div style={{ display:'flex', gap:10 }}>
-            <button onClick={() => { setConfirmed(true); generateReport(true) }}
+            <button onClick={() => {
+                console.log('[BTN] clicked, parsed=', !!parsed, 'confirmed=', confirmed, 'step=', step)
+                setConfirmed(true)
+                generateReport(true)
+              }}
               style={{ padding:'10px 24px', background:'#16a34a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
               ✨ Confirm & Generate AI Report
             </button>
