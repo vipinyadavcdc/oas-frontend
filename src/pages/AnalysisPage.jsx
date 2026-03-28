@@ -156,34 +156,32 @@ Generate a detailed professional report with these sections:
 Use specific numbers from the data. Be professional, concise and constructive.
 Format with clear headings using markdown (## for sections, ### for sub-sections).`
 
-      // Call Claude API with streaming
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model:      'claude-sonnet-4-20250514',
-          max_tokens: 2000,
-          stream:     true,
-          messages:   [{ role: 'user', content: prompt }]
-        })
+      // Call via backend — API key is stored server-side
+      const token1   = localStorage.getItem('cdc_token')
+      const apiBase1 = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/api/analysis/ai-report'
+      const response = await fetch(apiBase1, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body:    JSON.stringify({ prompt })
       })
 
-      const reader  = response.body.getReader()
-      const decoder = new TextDecoder()
+      if (!response.ok) throw new Error(`Server error ${response.status}`)
+
+      const reader   = response.body.getReader()
+      const decoder  = new TextDecoder()
       let   fullText = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n').filter(l => l.startsWith('data: '))
+        const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))
         for (const line of lines) {
           try {
+            if (line.includes('[DONE]')) break
             const json = JSON.parse(line.slice(6))
-            if (json.type === 'content_block_delta' && json.delta?.text) {
-              fullText += json.delta.text
+            if (json.text) {
+              fullText += json.text
               setAiText(fullText)
-              // Auto scroll
               if (aiRef.current) aiRef.current.scrollTop = aiRef.current.scrollHeight
             }
           } catch {}
@@ -234,40 +232,32 @@ Format with clear headings using markdown (## for sections, ### for sub-sections
     setAiChat(prev => [...prev, { role: 'user', content: question }])
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model:      'claude-sonnet-4-20250514',
-          max_tokens: 800,
-          stream:     true,
-          messages:   messages.filter(m => m.role !== 'system').map(m => ({
-            role:    m.role,
-            content: m.content
-          }))
-        })
+      const token2   = localStorage.getItem('cdc_token')
+      const apiBase2 = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/api/analysis/ai-report'
+      const chatPrompt = messages.filter(m => m.role !== 'system')
+        .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')
+      const response = await fetch(apiBase2, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
+        body:    JSON.stringify({ prompt: chatPrompt })
       })
 
-      const reader   = response.body.getReader()
-      const decoder  = new TextDecoder()
-      let   answer   = ''
-      let   msgIndex = -1
+      const reader  = response.body.getReader()
+      const decoder = new TextDecoder()
+      let   answer  = ''
 
-      setAiChat(prev => {
-        msgIndex = prev.length
-        return [...prev, { role: 'assistant', content: '' }]
-      })
+      setAiChat(prev => [...prev, { role: 'assistant', content: '' }])
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n').filter(l => l.startsWith('data: '))
+        const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))
         for (const line of lines) {
           try {
+            if (line.includes('[DONE]')) break
             const json = JSON.parse(line.slice(6))
-            if (json.type === 'content_block_delta' && json.delta?.text) {
-              answer += json.delta.text
+            if (json.text) {
+              answer += json.text
               setAiChat(prev => {
                 const updated = [...prev]
                 updated[updated.length - 1] = { role: 'assistant', content: answer }

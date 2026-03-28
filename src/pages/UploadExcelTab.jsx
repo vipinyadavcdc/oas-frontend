@@ -536,16 +536,22 @@ ${sectionStr ? '### Section-wise Analysis\n(Mid Term vs CE vs End Term trends)' 
 Note: Be specific, professional, and constructive. Use precise numbers. Avoid generic statements. This report will be presented to the Dean and HODs.`
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model:      'claude-sonnet-4-20250514',
-          max_tokens: 2500,
-          stream:     true,
-          messages:   [{ role: 'user', content: prompt }]
-        })
+      const token  = localStorage.getItem('cdc_token')
+      const apiUrl = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/api/analysis/ai-report'
+
+      const response = await fetch(apiUrl, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ prompt })
       })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || `Server error ${response.status}`)
+      }
 
       const reader  = response.body.getReader()
       const decoder = new TextDecoder()
@@ -557,18 +563,23 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
         const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))
         for (const line of lines) {
           try {
+            if (line.includes('[DONE]')) break
             const json = JSON.parse(line.slice(6))
-            if (json.type === 'content_block_delta' && json.delta?.text) {
-              full += json.delta.text
+            if (json.error) throw new Error(json.error)
+            if (json.text) {
+              full += json.text
               setAiText(full)
               if (aiRef.current) aiRef.current.scrollTop = aiRef.current.scrollHeight
             }
-          } catch {}
+          } catch (e) {
+            if (e.message && !e.message.includes('JSON') && !e.message.includes('Unexpected')) throw e
+          }
         }
       }
       setAiChat([{ role: 'system', stats, fileName: file?.name }])
     } catch (err) {
-      toast.error('AI report failed. Please try again.')
+      toast.error('AI report failed: ' + (err.message || 'Please try again.'))
+      console.error('AI error:', err)
     } finally {
       setAiLoading(false)
       clearInterval(timerRef.current)
@@ -594,18 +605,20 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
     setAiChat(prev => [...prev, { role: 'user', content: q }])
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514', max_tokens: 600, stream: true,
-          messages: msgs.filter(m => m.role !== 'system')
-        })
-      })
+      const token2  = localStorage.getItem('cdc_token')
+      const chatPrompt = msgs.filter(m => m.role !== 'system').map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n') + '\nAssistant:'
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || ''}/api/analysis/ai-report`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
+          body: JSON.stringify({ prompt: chatPrompt })
+        }
+      )
 
-      const reader = response.body.getReader()
+      const reader  = response.body.getReader()
       const decoder = new TextDecoder()
-      let answer = ''
+      let   answer  = ''
 
       setAiChat(prev => [...prev, { role: 'assistant', content: '' }])
 
@@ -615,9 +628,10 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
         const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))
         for (const line of lines) {
           try {
+            if (line.includes('[DONE]')) break
             const json = JSON.parse(line.slice(6))
-            if (json.type === 'content_block_delta' && json.delta?.text) {
-              answer += json.delta.text
+            if (json.text) {
+              answer += json.text
               setAiChat(prev => { const u = [...prev]; u[u.length-1] = { role:'assistant', content: answer }; return u })
             }
           } catch {}
