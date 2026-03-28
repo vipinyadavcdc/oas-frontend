@@ -18,7 +18,7 @@ const adminItems = [
 
 export default function DashboardLayout() {
   const { trainer, logout, isSuperAdmin } = useAuth()
-  const isAnalysisUser = ['EMP001','EMP002'].includes(trainer?.emp_id)
+  const isAnalysisUser = ['vipinyadav.cdc@mriu.edu.in', 'ankurkumaraggarwal@mru.edu.in'].includes(trainer?.email?.toLowerCase())
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const handleLogout = () => { logout(); navigate('/login') }
