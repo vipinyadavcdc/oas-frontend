@@ -1037,8 +1037,6 @@ Confidential — For Internal Use Only`
                 </div>
               )}
             </div>
-          </div>
-
           </div>}
 
           {/* AI Report */}
