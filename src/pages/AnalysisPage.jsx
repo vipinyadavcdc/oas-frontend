@@ -158,7 +158,7 @@ Format with clear headings using markdown (## for sections, ### for sub-sections
 
       // Call via backend — API key is stored server-side
       const token1   = localStorage.getItem('cdc_token')
-      const apiBase1 = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/api/analysis/ai-report'
+      const apiBase1 = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/analysis/ai-report'
       const response = await fetch(apiBase1, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -233,7 +233,7 @@ Format with clear headings using markdown (## for sections, ### for sub-sections
 
     try {
       const token2   = localStorage.getItem('cdc_token')
-      const apiBase2 = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/api/analysis/ai-report'
+      const apiBase2 = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/analysis/ai-report'
       const chatPrompt = messages.filter(m => m.role !== 'system')
         .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')
       const response = await fetch(apiBase2, {

@@ -537,7 +537,7 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
 
     try {
       const token  = localStorage.getItem('cdc_token')
-      const apiUrl = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/api/analysis/ai-report'
+      const apiUrl = (import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app') + '/analysis/ai-report'
 
       const response = await fetch(apiUrl, {
         method:  'POST',
@@ -610,7 +610,7 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
       const token2  = localStorage.getItem('cdc_token')
       const chatPrompt = msgs.filter(m => m.role !== 'system').map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n') + '\nAssistant:'
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || ''}/api/analysis/ai-report`,
+        `${import.meta.env.VITE_API_URL || 'https://oas-backend-production.up.railway.app'}/analysis/ai-report`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
