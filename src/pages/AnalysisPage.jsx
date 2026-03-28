@@ -3,6 +3,7 @@
 // Tabs: Overview | Sections | Rankings | Departments | Questions | Integrity | Trends | AI Report
 
 import { useState, useEffect, useRef } from 'react'
+import UploadExcelTab from './UploadExcelTab'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'integrity',   label: '🔴 Integrity' },
   { id: 'trends',      label: '📈 Trends' },
   { id: 'ai',          label: '🤖 AI Report' },
+  { id: 'upload',      label: '📤 Upload Excel' },
 ]
 
 export default function AnalysisPage() {
@@ -788,6 +790,8 @@ Confidential — For Internal Use Only
           )}
 
           {/* ── AI REPORT ── */}
+          {tab === 'upload' && <UploadExcelTab />}
+
           {tab === 'ai' && (
             <div style={{ display:'grid', gap:16 }}>
               <Card>
