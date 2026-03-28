@@ -9,7 +9,7 @@ import api from '../utils/api'
 import toast from 'react-hot-toast'
 
 // ── Access Guard ─────────────────────────────────────────────────────────────
-const ALLOWED = ['EMP001', 'EMP002']
+const ALLOWED = ['vipinyadav.cdc@mriu.edu.in', 'ankurkumaraggarwal@mru.edu.in']
 
 const TABS = [
   { id: 'overview',    label: '📊 Overview' },
@@ -27,7 +27,7 @@ export default function AnalysisPage() {
   const navigate    = useNavigate()
 
   // Access check
-  if (!trainer || !ALLOWED.includes(trainer.emp_id)) {
+  if (!trainer || !ALLOWED.includes(trainer.email?.toLowerCase())) {
     return (
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', flexDirection:'column', gap:12 }}>
         <div style={{ fontSize:48 }}>🔒</div>
