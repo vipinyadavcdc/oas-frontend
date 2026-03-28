@@ -549,8 +549,10 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
       })
 
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.error || `Server error ${response.status}`)
+        const errText = await response.text().catch(() => '')
+        let errMsg = `Server error ${response.status}`
+        try { errMsg = JSON.parse(errText).error || errMsg } catch {}
+        throw new Error(errMsg)
       }
 
       const reader  = response.body.getReader()
