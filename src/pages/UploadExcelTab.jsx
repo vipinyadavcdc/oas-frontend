@@ -937,15 +937,37 @@ Confidential — For Internal Use Only`
       )}
 
       {/* Step 3 — Charts + AI Report */}
-      {step >= 3 && stats && (
+      {step >= 3 && (
         <>
-          {/* Stats Dashboard */}
-          <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, overflow:'hidden' }}>
+          {/* Loading Screen — shown while AI is generating */}
+          {aiLoading && !aiText && (
+            <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:'50px 20px', textAlign:'center' }}>
+              <div style={{ fontSize:52, animation:'pulse 1.5s ease-in-out infinite', marginBottom:16 }}>🤖</div>
+              <div style={{ fontSize:15, fontWeight:700, color:'var(--color-text)', marginBottom:8 }}>
+                {LOADING_MESSAGES[loadingMsg]}
+              </div>
+              <div style={{ fontSize:13, color:'var(--color-text-muted)', marginBottom:20 }}>
+                ⏱ {elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed/60)}m ${elapsed%60}s`} elapsed
+              </div>
+              <div style={{ width:'100%', maxWidth:320, height:6, background:'var(--color-surface2)', borderRadius:3, overflow:'hidden', margin:'0 auto 20px' }}>
+                <div style={{ height:'100%', borderRadius:3, background:'linear-gradient(90deg,#2563eb,#7c3aed)', animation:'progressSlide 2s ease-in-out infinite', width:'60%' }} />
+              </div>
+              <div style={{ display:'flex', gap:6, justifyContent:'center', marginBottom:16 }}>
+                {LOADING_MESSAGES.map((_, i) => (
+                  <div key={i} style={{ width:8, height:8, borderRadius:'50%', background: i < loadingMsg ? '#2563eb' : i === loadingMsg ? '#7c3aed' : 'var(--color-border)', transition:'all 0.3s', transform: i === loadingMsg ? 'scale(1.4)' : 'scale(1)' }} />
+                ))}
+              </div>
+              <div style={{ fontSize:11, color:'var(--color-text-muted)' }}>Generating a comprehensive management report. This usually takes 15–25 seconds.</div>
+            </div>
+          )}
+
+          {/* Stats Dashboard — shown once we have data */}
+          {(!aiLoading || aiText) && stats && <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, overflow:'hidden' }}>
             {/* Header */}
             <div style={{ background:'linear-gradient(135deg,#1e3a8a,#1d4ed8)', color:'white', padding:'20px 24px' }}>
               <div style={{ fontSize:11, opacity:0.7, letterSpacing:1, marginBottom:6 }}>CAREER DEVELOPMENT CENTRE — MREI</div>
               <div style={{ fontSize:18, fontWeight:800, marginBottom:4 }}>Exam Performance Dashboard</div>
-              <div style={{ fontSize:12, opacity:0.8 }}>{file?.name} &nbsp;·&nbsp; Cutoff: {cutoff}% &nbsp;·&nbsp; {stats.total} Students</div>
+              <div style={{ fontSize:12, opacity:0.8 }}>{file?.name} &nbsp;·&nbsp; Cutoff: {cutoff}% &nbsp;·&nbsp; {stats?.total} Students</div>
             </div>
 
             <div style={{ padding:20 }}>
@@ -1016,6 +1038,8 @@ Confidential — For Internal Use Only`
               )}
             </div>
           </div>
+
+          </div>}
 
           {/* AI Report */}
           <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:20 }}>
