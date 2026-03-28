@@ -564,13 +564,17 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
       const decoder = new TextDecoder()
       let   full    = ''
 
+      console.log('[AI] Stream started, reading...')
+
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
-        const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))
+        if (done) { console.log('[AI] Stream done'); break }
+        const raw = decoder.decode(value)
+        console.log('[AI] Raw chunk:', raw.slice(0, 200))
+        const lines = raw.split('\n').filter(l => l.startsWith('data: '))
         for (const line of lines) {
           try {
-            if (line.includes('[DONE]')) break
+            if (line.includes('[DONE]')) { console.log('[AI] DONE received'); break }
             const json = JSON.parse(line.slice(6))
             if (json.error) throw new Error(json.error)
             if (json.text) {
@@ -579,10 +583,12 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
               if (aiRef.current) aiRef.current.scrollTop = aiRef.current.scrollHeight
             }
           } catch (e) {
+            console.log('[AI] Parse error:', e.message, 'line:', line.slice(0,100))
             if (e.message && !e.message.includes('JSON') && !e.message.includes('Unexpected')) throw e
           }
         }
       }
+      console.log('[AI] Full text length:', full.length)
       setAiChat([{ role: 'system', stats, fileName: file?.name }])
     } catch (err) {
       toast.error('AI report failed: ' + (err.message || 'Please try again.'))
