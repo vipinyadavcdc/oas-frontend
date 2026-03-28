@@ -289,7 +289,22 @@ export default function UploadExcelTab() {
   const [chatLoading,  setChatLoading]  = useState(false)
   const [step,         setStep]         = useState(1) // 1=upload, 2=confirm, 3=report
   const [dragging,     setDragging]     = useState(false)
-  const aiRef   = useRef(null)
+  const [elapsed,      setElapsed]      = useState(0)
+  const [loadingMsg,   setLoadingMsg]   = useState(0)
+  const aiRef       = useRef(null)
+  const timerRef    = useRef(null)
+  const msgTimerRef = useRef(null)
+
+  const LOADING_MESSAGES = [
+    '📊 Reading exam data...',
+    '🧮 Calculating performance statistics...',
+    '🏫 Analysing domain-wise scores...',
+    '📈 Identifying trends and patterns...',
+    '🔍 Evaluating at-risk students...',
+    '✍️ Drafting executive summary...',
+    '📋 Preparing recommendations...',
+    '🎯 Finalising management report...',
+  ]
   const fileRef = useRef(null)
 
   // ── Read Excel using SheetJS ──────────────────────────────────────────────
@@ -432,6 +447,21 @@ export default function UploadExcelTab() {
     setAiText('')
     setAiChat([])
     setStep(3)
+    setElapsed(0)
+    setLoadingMsg(0)
+
+    // Start elapsed timer
+    const start = Date.now()
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - start) / 1000))
+    }, 1000)
+
+    // Cycle through loading messages every 3 seconds
+    let msgIdx = 0
+    msgTimerRef.current = setInterval(() => {
+      msgIdx = (msgIdx + 1) % 8
+      setLoadingMsg(msgIdx)
+    }, 3000)
 
     const stats = getStats()
     if (!stats) { setAiLoading(false); return }
@@ -541,6 +571,8 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
       toast.error('AI report failed. Please try again.')
     } finally {
       setAiLoading(false)
+      clearInterval(timerRef.current)
+      clearInterval(msgTimerRef.current)
     }
   }
 
@@ -990,8 +1022,45 @@ Confidential — For Internal Use Only`
 
             <div ref={aiRef} style={{ background:'var(--color-surface2)', borderRadius:10, padding:20, minHeight:200, maxHeight:520, overflowY:'auto', border:'1px solid var(--color-border)', marginBottom:16 }}>
               {aiLoading && !aiText && (
-                <div style={{ display:'flex', alignItems:'center', gap:10, color:'var(--color-text-muted)', fontSize:13 }}>
-                  <div className="spinner w-4 h-4" /> Analysing data and generating management report...
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'40px 20px', gap:20 }}>
+                  {/* Pulsing brain icon */}
+                  <div style={{ fontSize:48, animation:'pulse 1.5s ease-in-out infinite' }}>🤖</div>
+
+                  {/* Loading message */}
+                  <div style={{ fontSize:15, fontWeight:600, color:'var(--color-text)', textAlign:'center', minHeight:24 }}>
+                    {LOADING_MESSAGES[loadingMsg]}
+                  </div>
+
+                  {/* Elapsed time */}
+                  <div style={{ fontSize:13, color:'var(--color-text-muted)' }}>
+                    ⏱ {elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed/60)}m ${elapsed%60}s`} elapsed
+                  </div>
+
+                  {/* Progress bar — animated */}
+                  <div style={{ width:'100%', maxWidth:320, height:6, background:'var(--color-surface2)', borderRadius:3, overflow:'hidden' }}>
+                    <div style={{
+                      height:'100%', borderRadius:3,
+                      background:'linear-gradient(90deg, #2563eb, #7c3aed)',
+                      animation:'progressSlide 2s ease-in-out infinite',
+                      width:'60%'
+                    }} />
+                  </div>
+
+                  {/* Steps indicator */}
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'center', maxWidth:400 }}>
+                    {LOADING_MESSAGES.map((msg, i) => (
+                      <div key={i} style={{
+                        width:8, height:8, borderRadius:'50%',
+                        background: i < loadingMsg ? '#2563eb' : i === loadingMsg ? '#7c3aed' : 'var(--color-border)',
+                        transition:'all 0.3s',
+                        transform: i === loadingMsg ? 'scale(1.4)' : 'scale(1)'
+                      }} />
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize:11, color:'var(--color-text-muted)', textAlign:'center' }}>
+                    Generating a comprehensive management report.<br/>This usually takes 15–25 seconds.
+                  </div>
                 </div>
               )}
               {aiText && renderMD(aiText)}
@@ -1035,7 +1104,15 @@ Confidential — For Internal Use Only`
         </>
       )}
 
-      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+      <style>{`
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
+  @keyframes progressSlide {
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(80%); }
+    100% { transform: translateX(200%); }
+  }
+`}</style>
     </div>
   )
 }
