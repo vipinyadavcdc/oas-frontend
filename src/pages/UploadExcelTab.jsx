@@ -768,192 +768,129 @@ Note: Be specific, professional, and constructive. Use precise numbers. Avoid ge
   const exportWord = () => {
     if (!aiText) return toast.error('Generate report first')
     const stats = getStats()
-    const passRate = stats?.withScores ? (stats.passed/stats.withScores*100).toFixed(1) : 0
+    const passRate = stats && stats.withScores ? (stats.passed/stats.withScores*100).toFixed(1) : 0
 
-    // Build domain rows
-    const domainRows = Object.entries(stats?.domainAvgs||{}).map(([d,a]) => `
-      <tr>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${d}</td>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${a.toFixed(1)}%</td>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0">
-          <div style="height:10px;background:#e2e8f0;border-radius:5px">
-            <div style="height:10px;width:${Math.min(100,a)}%;background:${a>=cutoff?'#16a34a':'#ef4444'};border-radius:5px"></div>
-          </div>
-        </td>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;color:${a>=cutoff?'#16a34a':'#ef4444'};font-weight:700">${a>=cutoff?'✅ Good':'⚠️ Needs Attention'}</td>
-      </tr>`).join('')
+    // Convert markdown to HTML safely — no nested template literals
+    const mdToHtml = (text) => {
+      if (!text) return ''
+      return text.split('\n').map(line => {
+        if (line.startsWith('## ')) {
+          const t = line.slice(3)
+          return '<h2 style="color:#1e3a8a;font-size:16pt;margin:20pt 0 6pt;padding-bottom:4pt;border-bottom:2px solid #1e3a8a">' + t + '</h2>'
+        }
+        if (line.startsWith('### ')) {
+          const t = line.slice(4)
+          return '<h3 style="color:#374151;font-size:13pt;margin:14pt 0 4pt">' + t + '</h3>'
+        }
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          const t = line.slice(2).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          return '<p style="margin:3pt 0 3pt 16pt;font-size:11pt;color:#374151">&bull; ' + t + '</p>'
+        }
+        if (line.trim() === '---') return '<hr style="border:none;border-top:1px solid #e5e7eb;margin:12pt 0">'
+        if (line.trim() === '')    return '<p style="margin:4pt 0">&nbsp;</p>'
+        const t = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        return '<p style="margin:4pt 0;font-size:11pt;color:#374151;line-height:1.6">' + t + '</p>'
+      }).join('')
+    }
 
-    // Build section rows
-    const sectionRows = Object.entries(stats?.sectionAvgs||{}).map(([sec,{avg,max}]) => {
-      const pct = max > 0 ? (avg/max*100) : 0
-      return `
-      <tr>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${sec}</td>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${avg.toFixed(1)} / ${max}</td>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${pct.toFixed(1)}%</td>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0">
-          <div style="height:10px;background:#e2e8f0;border-radius:5px">
-            <div style="height:10px;width:${Math.min(100,pct)}%;background:${pct>=cutoff?'#16a34a':'#ef4444'};border-radius:5px"></div>
-          </div>
-        </td>
-        <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;color:${pct>=cutoff?'#16a34a':'#ef4444'};font-weight:700">${pct>=cutoff?'✅ Pass':'❌ Below Cutoff'}</td>
-      </tr>`
+    // Build KPI table rows
+    const kpiRows = [
+      ['Total Students',         stats ? stats.total : 0,                                   '#1e3a8a', 'Confirmed'],
+      ['Average Score',          stats ? stats.avg.toFixed(1) + '%' : '0%',                 '#7c3aed', stats && parseFloat(stats.avg) >= cutoff ? 'Above Cutoff' : 'Below Cutoff'],
+      ['Pass Rate',              passRate + '%',                                             '#16a34a', parseFloat(passRate) >= 50 ? 'Satisfactory' : 'Needs Improvement'],
+      ['Passed Students',        stats ? stats.passed : 0,                                  '#16a34a', 'of ' + (stats ? stats.withScores : 0) + ' assessed'],
+      ['Failed Students',        stats ? stats.failed : 0,                                  '#ef4444', 'Requires Intervention'],
+      ['Highest Score',          stats ? stats.highest.toFixed(1) + '%' : '0%',             '#16a34a', 'Top Performer'],
+      ['Absent / Detained',      stats ? stats.absent : 0,                                  '#f59e0b', 'Follow-up Required'],
+    ].map(function(row) {
+      return '<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">' + row[0] +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:' + row[2] + ';font-size:13pt">' + row[1] +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0">' + row[3] + '</td></tr>'
     }).join('')
 
-    // Convert markdown to HTML
-    const reportHtml = aiText.split('\n').map(line => {
-      if (line.startsWith('## '))  return \`<h2 style="color:#1e3a8a;font-size:16pt;margin:20pt 0 6pt;padding-bottom:4pt;border-bottom:2px solid #1e3a8a">\${line.slice(3)}</h2>\`
-      if (line.startsWith('### ')) return \`<h3 style="color:#374151;font-size:13pt;margin:14pt 0 4pt">\${line.slice(4)}</h3>\`
-      if (line.startsWith('- ') || line.startsWith('* ')) return \`<p style="margin:3pt 0 3pt 16pt;font-size:11pt;color:#374151">• \${line.slice(2).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</p>\`
-      if (line.trim() === '---') return '<hr style="border:none;border-top:1px solid #e5e7eb;margin:12pt 0">'
-      if (line.trim() === '')    return '<p style="margin:4pt 0"> </p>'
-      return \`<p style="margin:4pt 0;font-size:11pt;color:#374151;line-height:1.6">\${line.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</p>\`
+    // Score distribution rows
+    const scores = stats ? stats.scores : []
+    const distRows = [
+      ['0 - 20%',   scores.filter(function(s){return s<20}).length,              '#ef4444'],
+      ['20 - 40%',  scores.filter(function(s){return s>=20&&s<40}).length,       '#f97316'],
+      ['40 - 60%',  scores.filter(function(s){return s>=40&&s<60}).length,       '#eab308'],
+      ['60 - 80%',  scores.filter(function(s){return s>=60&&s<80}).length,       '#22c55e'],
+      ['80 - 100%', scores.filter(function(s){return s>=80}).length,             '#2563eb'],
+    ].map(function(row) {
+      const pct = stats && stats.withScores ? Math.round(row[1]/stats.withScores*100) : 0
+      const bar = '<div style="height:10px;background:#f3f4f6;border-radius:5px"><div style="height:10px;width:' + pct + '%;background:' + row[2] + ';border-radius:5px"></div></div>'
+      return '<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">' + row[0] +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:' + row[2] + '">' + row[1] +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">' + pct + '%' +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;width:180px">' + bar + '</td></tr>'
     }).join('')
 
-    const wordHtml = \`
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="utf-8">
-  <title>CDC Analysis Report</title>
-  <!--[if gte mso 9]>
-  <xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml>
-  <![endif]-->
-  <style>
-    body { font-family: Calibri, Arial, sans-serif; margin: 2cm; color: #111; }
-    table { border-collapse: collapse; width: 100%; margin: 12pt 0; }
-    th { background: #1e3a8a; color: white; padding: 10px 12px; text-align: left; font-size: 11pt; border: 1px solid #1e3a8a; }
-    td { font-size: 11pt; vertical-align: middle; }
-    .kpi-box { display: inline-block; background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 10px 16px; margin: 6px; text-align: center; min-width: 100px; }
-    .kpi-val { font-size: 22pt; font-weight: bold; color: #1e3a8a; display: block; }
-    .kpi-lbl { font-size: 9pt; color: #6b7280; display: block; margin-top: 2px; }
-  </style>
-</head>
-<body>
+    // Domain rows
+    const domainRows = Object.entries(stats ? stats.domainAvgs : {}).map(function(entry) {
+      const d = entry[0], a = entry[1]
+      const pct = Math.min(100, a)
+      const color = a >= cutoff ? '#16a34a' : '#ef4444'
+      const bar = '<div style="height:10px;background:#f3f4f6;border-radius:5px"><div style="height:10px;width:' + pct + '%;background:' + color + ';border-radius:5px"></div></div>'
+      return '<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">' + d +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:' + color + '">' + a.toFixed(1) + '%' +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;width:180px">' + bar + '</td></tr>'
+    }).join('')
 
-<!-- COVER -->
-<div style="background:#1e3a8a;color:white;padding:30pt 30pt;margin-bottom:24pt">
-  <p style="font-size:9pt;opacity:0.7;letter-spacing:1px;margin:0 0 8pt">CAREER DEVELOPMENT CENTRE — MANAV RACHNA EDUCATIONAL INSTITUTIONS</p>
-  <h1 style="font-size:22pt;font-weight:800;margin:0 0 6pt;color:white">Exam Performance Analysis Report</h1>
-  <p style="font-size:12pt;margin:0 0 4pt;color:#bfdbfe">${file?.name}</p>
-  <p style="font-size:10pt;color:#93c5fd;margin:0">
-    Generated: ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})} &nbsp;|&nbsp; 
-    Cutoff: ${cutoff}% &nbsp;|&nbsp; 
-    Total Students: ${stats?.total}
-  </p>
-  <p style="font-size:9pt;color:#93c5fd;margin:12pt 0 0;font-style:italic">CONFIDENTIAL — FOR INTERNAL USE ONLY</p>
-</div>
+    // Section rows
+    const sectionRows = Object.entries(stats ? stats.sectionAvgs : {}).map(function(entry) {
+      const sec = entry[0], sv = entry[1]
+      const pct = sv.max > 0 ? (sv.avg/sv.max*100) : 0
+      const color = pct >= cutoff ? '#16a34a' : '#ef4444'
+      const bar = '<div style="height:10px;background:#f3f4f6;border-radius:5px"><div style="height:10px;width:' + Math.min(100,pct) + '%;background:' + color + ';border-radius:5px"></div></div>'
+      return '<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">' + sec +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">' + sv.avg.toFixed(1) + ' / ' + sv.max +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:' + color + '">' + pct.toFixed(1) + '%' +
+             '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;width:180px">' + bar + '</td></tr>'
+    }).join('')
 
-<!-- KPI SECTION -->
-<h2 style="color:#1e3a8a;font-size:14pt;margin:0 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Key Performance Indicators</h2>
-<table>
-  <tr>
-    <th>Metric</th><th>Value</th><th>Status</th>
-  </tr>
-  <tr style="background:#f8fafc">
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Total Students</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#1e3a8a;font-size:13pt">${stats?.total}</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0">✅ Confirmed</td>
-  </tr>
-  <tr>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Average Score</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#7c3aed;font-size:13pt">${stats?.avg?.toFixed(1)}%</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;color:${parseFloat(stats?.avg)>=cutoff?'#16a34a':'#ef4444'}">${parseFloat(stats?.avg)>=cutoff?'✅ Above Cutoff':'⚠️ Below Cutoff'}</td>
-  </tr>
-  <tr style="background:#f8fafc">
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Pass Rate (≥${cutoff}%)</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#16a34a;font-size:13pt">${passRate}%</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;color:${parseFloat(passRate)>=50?'#16a34a':'#ef4444'}">${parseFloat(passRate)>=50?'✅ Satisfactory':'⚠️ Needs Improvement'}</td>
-  </tr>
-  <tr>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Passed Students</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#16a34a;font-size:13pt">${stats?.passed}</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0">of ${stats?.withScores} students assessed</td>
-  </tr>
-  <tr style="background:#f8fafc">
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">At-Risk Students (Failed)</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#ef4444;font-size:13pt">${stats?.failed}</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;color:#ef4444">⚠️ Requires Intervention</td>
-  </tr>
-  <tr>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Highest Score</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#16a34a;font-size:13pt">${stats?.highest?.toFixed(1)}%</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0">🏆 Top Performer</td>
-  </tr>
-  <tr style="background:#f8fafc">
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Lowest Score</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#ef4444;font-size:13pt">${stats?.lowest?.toFixed(1)}%</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0">⚠️ Needs Support</td>
-  </tr>
-  <tr>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Absent / Detained</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#f59e0b;font-size:13pt">${stats?.absent}</td>
-    <td style="padding:8px 12px;border:1px solid #e2e8f0;color:#f59e0b">📋 Follow-up Required</td>
-  </tr>
-</table>
+    const date    = new Date().toLocaleDateString('en-IN', {day:'2-digit', month:'long', year:'numeric'})
+    const fname   = file ? file.name : ''
+    const fnclean = fname.replace(/\.[^.]+$/, '')
+    const fdate   = new Date().toLocaleDateString('en-IN').replace(/\//g, '-')
 
-<!-- SCORE DISTRIBUTION -->
-<h2 style="color:#1e3a8a;font-size:14pt;margin:20pt 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Score Distribution</h2>
-<table>
-  <tr>
-    <th>Score Range</th><th>Students</th><th>Percentage</th><th>Visual</th><th>Status</th>
-  </tr>
-  ${[
-    ['0 – 20%',   stats?.scores?.filter(s=>s<20).length,              '#ef4444'],
-    ['20 – 40%',  stats?.scores?.filter(s=>s>=20&&s<40).length,       '#f97316'],
-    ['40 – 60%',  stats?.scores?.filter(s=>s>=40&&s<60).length,       '#eab308'],
-    ['60 – 80%',  stats?.scores?.filter(s=>s>=60&&s<80).length,       '#22c55e'],
-    ['80 – 100%', stats?.scores?.filter(s=>s>=80).length,             '#2563eb'],
-  ].map(([range, count, color]) => {
-    const pct = stats?.withScores ? (count/stats.withScores*100).toFixed(0) : 0
-    return \`<tr>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">\${range}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:\${color}">\${count}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">\${pct}%</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;width:200px">
-        <div style="height:12px;background:#f3f4f6;border-radius:6px">
-          <div style="height:12px;width:\${pct}%;background:\${color};border-radius:6px"></div>
-        </div>
-      </td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;color:\${color}">\${parseInt(pct)>20?'▓▓▓':'░░░'}</td>
-    </tr>\`
-  }).join('')}
-</table>
+    const html = [
+      '<!DOCTYPE html><html><head><meta charset="utf-8">',
+      '<style>body{font-family:Calibri,Arial,sans-serif;margin:2cm;color:#111}',
+      'table{border-collapse:collapse;width:100%;margin:12pt 0}',
+      'th{background:#1e3a8a;color:white;padding:10px 12px;text-align:left;font-size:11pt;border:1px solid #1e3a8a}',
+      'td{font-size:11pt;vertical-align:middle}</style></head><body>',
+      // Cover
+      '<div style="background:#1e3a8a;color:white;padding:30pt">',
+      '<p style="font-size:9pt;opacity:0.7;margin:0 0 8pt">CAREER DEVELOPMENT CENTRE — MANAV RACHNA EDUCATIONAL INSTITUTIONS</p>',
+      '<h1 style="font-size:22pt;font-weight:800;margin:0 0 6pt;color:white">Exam Performance Analysis Report</h1>',
+      '<p style="font-size:12pt;color:#bfdbfe;margin:0 0 4pt">' + fname + '</p>',
+      '<p style="font-size:10pt;color:#93c5fd;margin:0">Generated: ' + date + ' &nbsp;|&nbsp; Cutoff: ' + cutoff + '% &nbsp;|&nbsp; Total Students: ' + (stats ? stats.total : 0) + '</p>',
+      '<p style="font-size:9pt;color:#93c5fd;margin:12pt 0 0;font-style:italic">CONFIDENTIAL — FOR INTERNAL USE ONLY</p>',
+      '</div>',
+      // KPIs
+      '<h2 style="color:#1e3a8a;font-size:14pt;margin:20pt 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Key Performance Indicators</h2>',
+      '<table><tr><th>Metric</th><th>Value</th><th>Status</th></tr>' + kpiRows + '</table>',
+      // Distribution
+      '<h2 style="color:#1e3a8a;font-size:14pt;margin:20pt 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Score Distribution</h2>',
+      '<table><tr><th>Range</th><th>Students</th><th>%</th><th>Visual</th></tr>' + distRows + '</table>',
+      // Domains
+      domainRows ? '<h2 style="color:#1e3a8a;font-size:14pt;margin:20pt 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Domain Performance</h2><table><tr><th>Domain</th><th>Average</th><th>Visual</th></tr>' + domainRows + '</table>' : '',
+      // Sections
+      sectionRows ? '<h2 style="color:#1e3a8a;font-size:14pt;margin:20pt 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Section Performance</h2><table><tr><th>Section</th><th>Score</th><th>Percentage</th><th>Visual</th></tr>' + sectionRows + '</table>' : '',
+      // AI Report
+      '<div style="margin-top:24pt">' + mdToHtml(aiText) + '</div>',
+      // Footer
+      '<div style="margin-top:40pt;padding-top:12pt;border-top:2px solid #1e3a8a;text-align:center">',
+      '<p style="font-size:10pt;color:#1e3a8a;font-weight:600;margin:0">Career Development Centre — Manav Rachna Educational Institutions</p>',
+      '<p style="font-size:9pt;color:#6b7280;margin:4pt 0 0">Confidential — For Internal Use Only</p>',
+      '</div></body></html>'
+    ].join('')
 
-${domainRows ? \`
-<h2 style="color:#1e3a8a;font-size:14pt;margin:20pt 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Domain-wise Performance</h2>
-<table>
-  <tr><th>Domain</th><th>Average</th><th>Visual</th><th>Status</th></tr>
-  \${domainRows}
-</table>\` : ''}
-
-${sectionRows ? \`
-<h2 style="color:#1e3a8a;font-size:14pt;margin:20pt 0 12pt;border-bottom:2px solid #1e3a8a;padding-bottom:4pt">Section-wise Performance</h2>
-<table>
-  <tr><th>Section</th><th>Score</th><th>Percentage</th><th>Visual</th><th>Status</th></tr>
-  \${sectionRows}
-</table>\` : ''}
-
-<!-- AI REPORT -->
-<div style="margin-top:24pt">
-  \${reportHtml}
-</div>
-
-<!-- FOOTER -->
-<div style="margin-top:40pt;padding-top:12pt;border-top:2px solid #1e3a8a;text-align:center">
-  <p style="font-size:10pt;color:#1e3a8a;font-weight:600;margin:0">Career Development Centre — Manav Rachna Educational Institutions</p>
-  <p style="font-size:9pt;color:#6b7280;margin:4pt 0 0">This report is confidential and intended for authorised personnel only.</p>
-</div>
-
-</body>
-</html>\`
-
-    const blob = new Blob([wordHtml], { type: 'application/msword' })
+    const blob = new Blob([html], { type: 'application/msword' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = \`CDC_Report_\${file?.name?.replace(/\.[^.]+$/, '')}_\${new Date().toLocaleDateString('en-IN').replace(/\//g,'-')}.doc\`
+    a.download = 'CDC_Report_' + fnclean + '_' + fdate + '.doc'
     a.click()
     URL.revokeObjectURL(url)
   }
