@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { LayoutDashboard, FileText, BookOpen, Users, Shield, Settings, LogOut, Menu, X, History, BarChart2 } from 'lucide-react'
+import { LayoutDashboard, FileText, BookOpen, Users, Shield, Settings, LogOut, Menu, X, History, BarChart2, Brain } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import ThemeSwitcher from './ThemeSwitcher'
 
@@ -8,9 +8,8 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/exams',     icon: FileText,         label: 'Exams' },
   { to: '/questions', icon: BookOpen,         label: 'Question Bank' },
-  { to: '/students',  icon: History,       label: 'Student History' },
+  { to: '/students',  icon: History,          label: 'Student History' },
 ]
-const analysisItem = { to: '/analysis', icon: BarChart2, label: 'Analysis' }
 const adminItems = [
   { to: '/trainers', icon: Users,  label: 'Trainers' },
   { to: '/audit',    icon: Shield, label: 'Audit Log' },
@@ -46,11 +45,25 @@ export default function DashboardLayout() {
         ))}
 
         {isAnalysisUser && (
-          <NavLink to="/analysis"
-            className={({ isActive }) => 'sidebar-link ' + (isActive ? 'active' : '')}
-            onClick={() => setSidebarOpen(false)}>
-            <BarChart2 size={18} /><span>Analysis</span>
-          </NavLink>
+          <>
+            <NavLink to="/analysis"
+              className={({ isActive }) => 'sidebar-link ' + (isActive ? 'active' : '')}
+              onClick={() => setSidebarOpen(false)}>
+              <BarChart2 size={18} /><span>Analysis</span>
+            </NavLink>
+
+            <NavLink to="/psychometric-admin"
+              className={({ isActive }) => 'sidebar-link ' + (isActive ? 'active' : '')}
+              onClick={() => setSidebarOpen(false)}
+              style={({ isActive }) => ({
+                background: isActive ? '#6366f120' : 'transparent',
+                color: isActive ? '#6366f1' : undefined,
+                borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
+              })}>
+              <Brain size={18} style={{ color: '#6366f1' }} />
+              <span style={{ color: '#6366f1', fontWeight: 700 }}>Psychometric</span>
+            </NavLink>
+          </>
         )}
 
         {isSuperAdmin && (
