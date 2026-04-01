@@ -494,8 +494,8 @@ function CreateTestModal({ onClose, onCreated }) {
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:400, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'var(--color-surface)', borderRadius:20, width:'100%', maxWidth:600, maxHeight:'90vh', overflowY:'auto', padding:28 }}>
+    <div style={{ position:'fixed', inset:0, zIndex:400, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:16, paddingTop:20, overflowY:'auto' }}>
+      <div style={{ background:'var(--color-surface)', borderRadius:20, width:'100%', maxWidth:600, padding:28, marginBottom:20 }}>
 
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <h2 style={{ fontSize:18, fontWeight:800, color:'var(--color-text)', margin:0 }}>Create Psychometric Test</h2>
