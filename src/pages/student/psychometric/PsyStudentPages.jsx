@@ -4,8 +4,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { MODULE_INFO, TIER_CONFIG } from '../../data/psyQuestions'
-import { PLACEMENT_MODULE_INFO } from '../../data/placementQuestions'
+import { MODULE_INFO, TIER_CONFIG } from '../../../data/psyQuestions'
+import { PLACEMENT_MODULE_INFO } from '../../../data/placementQuestions'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
