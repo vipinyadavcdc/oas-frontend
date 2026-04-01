@@ -17,10 +17,12 @@ import SettingsPage from './pages/SettingsPage'
 import StudentHistoryPage from './pages/StudentHistoryPage'
 import QuestionAnalyticsPage from './pages/QuestionAnalyticsPage'
 import AnalysisPage from './pages/AnalysisPage'
+import PsychometricPage from './pages/psychometric/PsychometricPage'
 
 import StudentEntryPage from './pages/student/StudentEntryPage'
 import StudentExamPage from './pages/student/StudentExamPage'
 import ExamDonePage from './pages/student/ExamDonePage'
+import { PsyEntryPage, PsyRegistrationPage, PsyInstructionsPage, PsyAssessmentPage, PsyCompletePage } from './pages/student/psychometric/PsyStudentPages'
 
 import DashboardLayout from './components/common/DashboardLayout'
 
@@ -39,6 +41,11 @@ function AppRoutes() {
       <Route path="/exam" element={<StudentEntryPage />} />
       <Route path="/exam/start" element={<StudentExamPage />} />
       <Route path="/exam/done" element={<ExamDonePage />} />
+      <Route path="/psychometric" element={<PsyEntryPage />} />
+      <Route path="/psychometric/register" element={<PsyRegistrationPage />} />
+      <Route path="/psychometric/instructions" element={<PsyInstructionsPage />} />
+      <Route path="/psychometric/assessment" element={<PsyAssessmentPage />} />
+      <Route path="/psychometric/complete" element={<PsyCompletePage />} />
       <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
@@ -55,6 +62,7 @@ function AppRoutes() {
         <Route path="audit" element={<ProtectedRoute superAdminOnly><AuditPage /></ProtectedRoute>} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="analysis" element={<AnalysisPage />} />
+        <Route path="psychometric-admin" element={<PsychometricPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
