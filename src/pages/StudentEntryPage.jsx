@@ -40,7 +40,7 @@ export default function StudentEntryPage() {
 
   // Fetch active session once on mount
   useEffect(() => {
-    api.get('/departments/active-session')
+    api.get('/sessions/active')
       .then(res => {
         if (res.data.session) {
           setActiveSession(res.data.session)

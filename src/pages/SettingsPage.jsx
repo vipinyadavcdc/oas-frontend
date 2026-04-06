@@ -17,7 +17,7 @@ function SessionsTab() {
   const load = async () => {
     setLoading(true)
     try {
-      const res = await api.get('/departments/sessions/all')
+      const res = await api.get('/sessions')
       setSessions(res.data.sessions || [])
     } catch { toast.error('Failed to load sessions') }
     finally { setLoading(false) }
@@ -29,7 +29,7 @@ function SessionsTab() {
     if (!newName.trim()) return
     setAdding(true)
     try {
-      const res = await api.post('/departments/sessions', { name: newName.trim(), type: newType })
+      const res = await api.post('/sessions', { name: newName.trim(), type: newType })
       setSessions(s => [res.data.session, ...s])
       setNewName('')
       toast.success('Session created')
@@ -39,7 +39,7 @@ function SessionsTab() {
 
   const activate = async (id) => {
     try {
-      const res = await api.patch(`/departments/sessions/${id}/activate`)
+      const res = await api.patch(`/sessions/${id}/activate`)
       setSessions(s => s.map(x => ({ ...x, is_active: x.id === id })))
       toast.success(`"${res.data.session.name}" is now the active session`)
     } catch { toast.error('Failed to activate') }
